@@ -549,20 +549,21 @@
             display: flex;
             flex-direction: column;
             gap: 16px;
-            min-height: 0;
+            align-self: flex-start;
+            position: sticky;
+            top: 88px; /* header height (64px) + padding (24px) */
+            max-height: calc(100vh - 112px); /* viewport - header - padding */
         }
 
         .queue-panel-inner {
-            flex: 1;
             display: flex;
             flex-direction: column;
-            min-height: 0;
+            max-height: 100%;
         }
 
         .queue-list {
-            flex: 1;
             overflow-y: auto;
-            min-height: 100px;
+            flex-shrink: 1;
         }
 
         .job-item {
@@ -706,14 +707,14 @@
         }
 
         .queue-empty {
-            padding: 60px 20px;
+            padding: 24px 20px;
             text-align: center;
             color: var(--text-secondary);
         }
 
         .queue-empty-icon {
             font-size: 2rem;
-            margin-bottom: 12px;
+            margin-bottom: 8px;
             opacity: 0.5;
         }
 
@@ -879,6 +880,13 @@
 
             .queue-panel {
                 width: 100%;
+                position: static;
+                align-self: stretch;
+                max-height: none;
+            }
+
+            .queue-panel-inner {
+                max-height: none;
             }
 
             .queue-list {
