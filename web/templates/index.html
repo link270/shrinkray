@@ -522,23 +522,11 @@
             gap: 8px;
         }
 
-        .estimate-close {
-            width: 32px;
-            height: 32px;
-            border: none;
-            background: transparent;
-            border-radius: var(--radius-sm);
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
+        .estimate-empty {
             color: var(--text-tertiary);
-            transition: all var(--transition-fast);
-        }
-
-        .estimate-close:hover {
-            background: var(--bg-tertiary);
-            color: var(--text-primary);
+            font-size: 0.875rem;
+            text-align: center;
+            padding: 8px 0;
         }
 
         /* Queue Panel */
@@ -1013,24 +1001,17 @@
                         <select class="preset-select" id="preset-select" onchange="onPresetChange()">
                             <option value="compress">Compress (Standard)</option>
                         </select>
-                        <button class="btn btn-secondary" onclick="toggleEstimate()" id="estimate-btn" disabled>Estimate</button>
                         <button class="btn btn-primary" onclick="startJobs()" id="start-btn" disabled>Start Transcode</button>
                         <span class="selection-count" id="selection-summary"></span>
                     </div>
                 </div>
 
-                <div class="estimate-panel hidden" id="estimate-panel">
+                <div class="estimate-panel" id="estimate-panel">
                     <div class="panel-header">
                         <span class="panel-title">Estimate</span>
-                        <button class="estimate-close" onclick="hideEstimate()">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                <line x1="18" y1="6" x2="6" y2="18"/>
-                                <line x1="6" y1="6" x2="18" y2="18"/>
-                            </svg>
-                        </button>
                     </div>
                     <div class="estimate-content" id="estimate-content">
-                        <!-- Populated by JS -->
+                        <div class="estimate-empty">Select files to see estimate</div>
                     </div>
                 </div>
             </div>
@@ -1124,7 +1105,6 @@
         let currentPath = '';
         let selectedPaths = new Set();
         let eventSource = null;
-        let estimatePanelOpen = false;
 
         function formatBytes(bytes) {
             if (bytes === 0) return '0 B';
@@ -1153,7 +1133,6 @@
                 currentPath = data.path;
                 selectedPaths.clear();
                 updateButtons();
-                hideEstimate();
 
                 // Update breadcrumb
                 const breadcrumb = document.getElementById('breadcrumb');
@@ -1282,7 +1261,6 @@
 
         function updateButtons() {
             const hasSelection = selectedPaths.size > 0;
-            document.getElementById('estimate-btn').disabled = !hasSelection;
             document.getElementById('start-btn').disabled = !hasSelection;
 
             const summary = document.getElementById('selection-summary');
@@ -1302,13 +1280,11 @@
                 selectAllCheckbox.indeterminate = someChecked && !allChecked;
             }
 
-            // Auto-refresh estimate if panel is open
-            if (estimatePanelOpen) {
-                if (hasSelection) {
-                    getEstimate();
-                } else {
-                    hideEstimate();
-                }
+            // Always update estimate
+            if (hasSelection) {
+                getEstimate();
+            } else {
+                clearEstimate();
             }
         }
 
@@ -1332,7 +1308,6 @@
                     return;
                 }
 
-                const panel = document.getElementById('estimate-panel');
                 const content = document.getElementById('estimate-content');
 
                 let html = `
@@ -1377,30 +1352,19 @@
                 }
 
                 content.innerHTML = html;
-                panel.classList.remove('hidden');
-                estimatePanelOpen = true;
 
             } catch (err) {
                 console.error('Estimate error:', err);
             }
         }
 
-        function hideEstimate() {
-            document.getElementById('estimate-panel').classList.add('hidden');
-            estimatePanelOpen = false;
+        function clearEstimate() {
+            document.getElementById('estimate-content').innerHTML =
+                '<div class="estimate-empty">Select files to see estimate</div>';
         }
 
         function onPresetChange() {
-            // Auto-refresh estimate if panel is open and we have selection
-            if (estimatePanelOpen && selectedPaths.size > 0) {
-                getEstimate();
-            }
-        }
-
-        function toggleEstimate() {
-            if (estimatePanelOpen) {
-                hideEstimate();
-            } else {
+            if (selectedPaths.size > 0) {
                 getEstimate();
             }
         }
@@ -1432,7 +1396,6 @@
                     if (cb) cb.checked = false;
                 });
                 updateButtons();
-                hideEstimate();
 
             } catch (err) {
                 console.error('Start jobs error:', err);
