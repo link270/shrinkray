@@ -2,6 +2,7 @@ package ffmpeg
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"runtime"
 	"testing"
@@ -15,6 +16,11 @@ func getTestdataPath() string {
 
 func TestProbe(t *testing.T) {
 	testFile := filepath.Join(getTestdataPath(), "test_x264.mkv")
+
+	// Skip if test file doesn't exist
+	if _, err := os.Stat(testFile); os.IsNotExist(err) {
+		t.Skipf("test file not found: %s", testFile)
+	}
 
 	prober := NewProber("ffprobe")
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

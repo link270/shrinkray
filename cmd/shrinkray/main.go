@@ -90,7 +90,7 @@ func main() {
 	}
 
 	// Detect available hardware encoders
-	encoders := ffmpeg.DetectEncoders(cfg.FFmpegPath)
+	ffmpeg.DetectEncoders(cfg.FFmpegPath)
 	ffmpeg.InitPresets()
 
 	// Display detected encoders
@@ -105,7 +105,6 @@ func main() {
 			fmt.Printf("    %s%s (%s)\n", marker, enc.Name, enc.Encoder)
 		}
 	}
-	_ = encoders // silence unused warning
 	fmt.Println()
 
 	// Initialize components
@@ -163,16 +162,7 @@ func main() {
 }
 
 func checkFFmpeg(cfg *config.Config) error {
-	// Try to run ffmpeg -version
-	prober := ffmpeg.NewProber(cfg.FFprobePath)
-	transcoder := ffmpeg.NewTranscoder(cfg.FFmpegPath)
-
-	// Simple check - just verify the binaries exist by trying to probe a non-existent file
-	// We expect an error, but not "executable not found"
-	_, _ = prober, transcoder
-
 	fmt.Printf("  FFmpeg:       %s\n", cfg.FFmpegPath)
 	fmt.Printf("  FFprobe:      %s\n", cfg.FFprobePath)
-
 	return nil
 }

@@ -202,17 +202,6 @@ func GetEncoderByKey(accel HWAccel, codec Codec) *HWEncoder {
 	return nil
 }
 
-// GetEncoder returns a specific HEVC encoder by accel type (for backward compatibility)
-func GetEncoder(accel HWAccel) *HWEncoder {
-	return GetEncoderByKey(accel, CodecHEVC)
-}
-
-// IsEncoderAvailable checks if a specific encoder is available
-func IsEncoderAvailable(accel HWAccel) bool {
-	enc := GetEncoder(accel)
-	return enc != nil && enc.Available
-}
-
 // IsEncoderAvailableForCodec checks if a specific encoder is available for a codec
 func IsEncoderAvailableForCodec(accel HWAccel, codec Codec) bool {
 	enc := GetEncoderByKey(accel, codec)
@@ -273,24 +262,6 @@ func ListAvailableEncoders() []*HWEncoder {
 				encCopy := *enc
 				result = append(result, &encCopy)
 			}
-		}
-	}
-	return result
-}
-
-// ListAvailableEncodersForCodec returns a slice of available encoders for a specific codec
-func ListAvailableEncodersForCodec(codec Codec) []*HWEncoder {
-	availableEncoders.mu.RLock()
-	defer availableEncoders.mu.RUnlock()
-
-	var result []*HWEncoder
-	priority := []HWAccel{HWAccelVideoToolbox, HWAccelNVENC, HWAccelQSV, HWAccelVAAPI, HWAccelNone}
-
-	for _, accel := range priority {
-		key := EncoderKey{accel, codec}
-		if enc, ok := availableEncoders.encoders[key]; ok && enc.Available {
-			encCopy := *enc
-			result = append(result, &encCopy)
 		}
 	}
 	return result

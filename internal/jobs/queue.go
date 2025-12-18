@@ -198,34 +198,6 @@ func (q *Queue) GetAll() []*Job {
 	return jobs
 }
 
-// GetPending returns all pending jobs in order
-func (q *Queue) GetPending() []*Job {
-	q.mu.RLock()
-	defer q.mu.RUnlock()
-
-	jobs := make([]*Job, 0)
-	for _, id := range q.order {
-		if job, ok := q.jobs[id]; ok && job.Status == StatusPending {
-			jobs = append(jobs, job)
-		}
-	}
-	return jobs
-}
-
-// GetRunning returns all currently running jobs
-func (q *Queue) GetRunning() []*Job {
-	q.mu.RLock()
-	defer q.mu.RUnlock()
-
-	jobs := make([]*Job, 0)
-	for _, job := range q.jobs {
-		if job.Status == StatusRunning {
-			jobs = append(jobs, job)
-		}
-	}
-	return jobs
-}
-
 // GetNext returns the next pending job (for workers to pick up)
 func (q *Queue) GetNext() *Job {
 	q.mu.Lock()
@@ -360,33 +332,6 @@ func (q *Queue) CancelJob(id string) error {
 	}
 
 	q.broadcast(JobEvent{Type: "cancelled", Job: job})
-
-	return nil
-}
-
-// Remove removes a job from the queue
-func (q *Queue) Remove(id string) error {
-	q.mu.Lock()
-	defer q.mu.Unlock()
-
-	if _, ok := q.jobs[id]; !ok {
-		return fmt.Errorf("job not found: %s", id)
-	}
-
-	delete(q.jobs, id)
-
-	// Remove from order
-	newOrder := make([]string, 0, len(q.order)-1)
-	for _, oid := range q.order {
-		if oid != id {
-			newOrder = append(newOrder, oid)
-		}
-	}
-	q.order = newOrder
-
-	if err := q.save(); err != nil {
-		fmt.Printf("Warning: failed to persist queue: %v\n", err)
-	}
 
 	return nil
 }

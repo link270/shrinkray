@@ -45,14 +45,6 @@ func (j *Job) IsTerminal() bool {
 	return j.Status == StatusComplete || j.Status == StatusFailed || j.Status == StatusCancelled
 }
 
-// JobUpdate represents an update to a job's progress
-type JobUpdate struct {
-	JobID    string  `json:"job_id"`
-	Progress float64 `json:"progress"`
-	Speed    float64 `json:"speed"`
-	ETA      string  `json:"eta"`
-}
-
 // JobEvent represents an event for SSE streaming
 type JobEvent struct {
 	Type string      `json:"type"` // "update", "complete", "failed", "cancelled"

@@ -270,36 +270,3 @@ func TestFinalizeTranscodeKeep(t *testing.T) {
 
 	t.Logf("Keep mode: original→%s, final=%s", oldPath, finalPath)
 }
-
-func TestParseProgressLine(t *testing.T) {
-	line := "frame=  123 fps=45.6 q=28.0 size=    1234kB time=00:01:23.45 bitrate= 123.4kbits/s speed=1.5x"
-	duration := 10 * time.Minute
-
-	progress := ParseProgressLine(line, duration)
-	if progress == nil {
-		t.Fatal("failed to parse progress line")
-	}
-
-	if progress.Frame != 123 {
-		t.Errorf("expected frame 123, got %d", progress.Frame)
-	}
-
-	if progress.FPS != 45.6 {
-		t.Errorf("expected fps 45.6, got %f", progress.FPS)
-	}
-
-	if progress.Size != 1234*1024 {
-		t.Errorf("expected size %d, got %d", 1234*1024, progress.Size)
-	}
-
-	expectedTime := 1*time.Minute + 23*time.Second + 450*time.Millisecond
-	if progress.Time != expectedTime {
-		t.Errorf("expected time %v, got %v", expectedTime, progress.Time)
-	}
-
-	if progress.Speed != 1.5 {
-		t.Errorf("expected speed 1.5, got %f", progress.Speed)
-	}
-
-	t.Logf("Parsed progress: %+v", progress)
-}

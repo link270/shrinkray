@@ -4,8 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-
-	"github.com/graysonwilson/shrinkray/internal/jobs"
 )
 
 // JobStream handles GET /api/jobs/stream (SSE endpoint)
@@ -56,11 +54,4 @@ func (h *Handler) JobStream(w http.ResponseWriter, r *http.Request) {
 			flusher.Flush()
 		}
 	}
-}
-
-// SSEEvent represents a Server-Sent Event
-type SSEEvent struct {
-	Type string      `json:"type"`
-	Job  *jobs.Job   `json:"job,omitempty"`
-	Jobs []*jobs.Job `json:"jobs,omitempty"`
 }

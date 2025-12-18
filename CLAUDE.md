@@ -834,3 +834,165 @@ Still outstanding:
 ---
 
 *End of development log for December 8, 2025 (Session 2)*
+
+---
+
+# Development Log - December 18, 2025
+
+This section documents a major simplification and cleanup session.
+
+## Session Summary
+
+Significant changes to simplify the app: removed estimation feature entirely, added AV1 codec support, simplified presets, added logo/favicon, rewrote README, and cleaned up all dead code.
+
+## Major Changes
+
+### 1. Removed Estimation Feature
+
+**Removed entirely.** The pre-transcode estimation (space savings, time estimates) was removed from both UI and backend. Reasons:
+- Estimates were unreliable, especially for hardware encoders
+- Added complexity without proportional value
+- Users just want to transcode, not analyze predictions
+
+Files affected:
+- Removed estimate button and display from `web/templates/index.html`
+- Removed `/api/estimate` endpoint from `internal/api/handler.go`
+- `internal/ffmpeg/estimate.go` now unused (kept for potential future use)
+
+### 2. Added AV1 Codec Support
+
+New presets now include AV1 options:
+- `compress-hevc` - HEVC encoding (H.265)
+- `compress-av1` - AV1 encoding (maximum compression)
+- `1080p` - Downscale to 1080p (HEVC)
+- `720p` - Downscale to 720p (HEVC)
+
+Hardware AV1 encoding supported on:
+- Apple Silicon M3+ (VideoToolbox)
+- NVIDIA RTX 40+ (NVENC)
+- Intel Arc (QSV)
+- AMD/Intel Linux (VAAPI)
+
+Falls back to SVT-AV1 software encoder if no hardware available.
+
+### 3. Simplified Quality Settings
+
+Removed the "standard" vs "smaller" quality distinction. Now each preset has one optimized quality setting:
+- HEVC: 35% of source bitrate (hardware) / CRF 26 (software)
+- AV1: 25% of source bitrate (hardware) / CRF 38 (software)
+
+### 4. Post-Transcode Size Check
+
+Added validation after transcoding completes:
+- If output file is **larger** than input, the job **fails**
+- Original file is preserved
+- Temp file is deleted
+- Error message explains the issue
+
+This prevents "negative compression" scenarios where re-encoding makes files bigger.
+
+### 5. Transcode Time Display
+
+Completed jobs now show how long the transcode took:
+- Added `TranscodeTime` field to Job struct (seconds)
+- Calculated as `CompletedAt - StartedAt`
+- Displayed in UI as "Took: Xm Ys"
+
+### 6. Logo and Favicon
+
+Added branding:
+- Logo displayed in top-left of header (64x64, 3KB)
+- Favicon for browser tab (32x32, 1.2KB)
+- Both derived from `shrinkray.png` (shrink ray gun image)
+- Original 1MB image was resized to appropriate dimensions
+- Favicon has 6px rounded corners (via ffmpeg geq filter)
+
+Files:
+- `web/templates/logo.png` - 64x64 header logo
+- `web/templates/favicon.png` - 32x32 with rounded corners
+- Routes added: `/logo.png`, `/favicon.ico`
+
+### 7. New README
+
+Rewrote README.md to be professional and concise:
+- Removed philosophy/ethos sections
+- Just documents what it does and how to use it
+- Covers: installation, usage, presets, hardware acceleration, configuration
+
+### 8. Removed Large File from Repo
+
+The original 1MB `shrinkray.png` was accidentally committed. Removed it from the repository after creating properly-sized versions.
+
+## Dead Code Removed
+
+After analyzing the entire codebase, the following unused code was removed:
+
+### `internal/ffmpeg/presets.go`
+- `ListPresetsForEncoder()` - was for manual encoder selection UI (never built)
+- `GetRecommendedPreset()` - same reason
+
+### `internal/ffmpeg/hwaccel.go`
+- `GetEncoder()` - get encoder by accel type only
+- `IsEncoderAvailable()` - check single encoder availability
+- `ListAvailableEncodersForCodec()` - list encoders for one codec
+
+These were scaffolding for a "power user" encoder selection flow that was never wired up. The app auto-selects the best encoder instead.
+
+### `internal/ffmpeg/transcode.go`
+- `ParseProgressLine()` - regex-based progress parser (replaced by key=value parsing)
+- `progressRegex` - compiled regex for above
+- Removed `regexp` import
+- Simplified redundant if/else in `FinalizeTranscode()`
+
+### `internal/jobs/job.go`
+- `JobUpdate` type - unused struct for progress updates
+
+### `internal/jobs/queue.go`
+- `GetPending()` - list pending jobs (unused)
+- `GetRunning()` - list running jobs (unused)
+- `Remove()` - remove single job (unused, ClearCompleted used instead)
+
+### `internal/api/sse.go`
+- `SSEEvent` type - duplicate of `jobs.JobEvent`
+- Removed `jobs` import
+
+### `cmd/shrinkray/main.go`
+- Removed unused `encoders` variable assignment
+- Simplified `checkFFmpeg()` - was creating unused Prober/Transcoder objects
+
+## Test Fixes
+
+### `internal/ffmpeg/transcode_test.go`
+- Removed `TestParseProgressLine` (tested removed function)
+
+### `internal/ffmpeg/probe_test.go`
+- Added skip condition when test video file doesn't exist
+
+## Favicon Update
+
+Added rounded corners (6px radius) to favicon using ffmpeg's `geq` filter:
+
+```bash
+ffmpeg -i favicon.png -vf "format=rgba,geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='if(lte(X,6)*lte(Y,6)*gt(pow(6-X,2)+pow(6-Y,2),36),0,if(gte(X,W-6)*lte(Y,6)*gt(pow(X-(W-7),2)+pow(6-Y,2),36),0,if(lte(X,6)*gte(Y,H-6)*gt(pow(6-X,2)+pow(Y-(H-7),2),36),0,if(gte(X,W-6)*gte(Y,H-6)*gt(pow(X-(W-7),2)+pow(Y-(H-7),2),36),0,255))))'" favicon_rounded.png
+```
+
+The `geq` filter uses Pythagorean theorem to detect pixels outside a 6px radius circle in each corner and sets their alpha to 0 (transparent).
+
+## Why So Much Encoder Code Was Dead
+
+The removed functions suggest an earlier design where users could manually select encoders. The current design is simpler - the app automatically picks the best available encoder via `GetBestEncoderForCodec()`. This aligns with the "it just works" philosophy.
+
+Functions actually used:
+- `DetectEncoders()` - runs once at startup
+- `GetBestEncoderForCodec()` - called when building presets
+- `ListAvailableEncoders()` - displays detected encoders in startup log
+
+## Verification
+
+- All packages build cleanly (`go build ./...`)
+- All tests pass (`go test ./...`)
+- `go vet ./...` reports no issues
+
+---
+
+*End of development log for December 18, 2025*

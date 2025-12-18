@@ -7,7 +7,6 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -200,16 +199,8 @@ func FinalizeTranscode(inputPath, tempPath string, replace bool) (finalPath stri
 
 	if replace {
 		// Replace mode: delete original, move temp to final location
-		if ext == ".mkv" {
-			// Same extension - can do atomic rename by removing original first
-			if err := os.Remove(inputPath); err != nil {
-				return "", fmt.Errorf("failed to remove original file: %w", err)
-			}
-		} else {
-			// Different extension (e.g., .mp4 -> .mkv) - delete original
-			if err := os.Remove(inputPath); err != nil {
-				return "", fmt.Errorf("failed to remove original file: %w", err)
-			}
+		if err := os.Remove(inputPath); err != nil {
+			return "", fmt.Errorf("failed to remove original file: %w", err)
 		}
 
 		if err := os.Rename(tempPath, finalPath); err != nil {
@@ -232,50 +223,4 @@ func FinalizeTranscode(inputPath, tempPath string, replace bool) (finalPath stri
 	}
 
 	return finalPath, nil
-}
-
-// progressRegex matches FFmpeg's default progress output
-var progressRegex = regexp.MustCompile(`frame=\s*(\d+)\s+fps=\s*([\d.]+)\s+.*size=\s*(\d+)kB\s+time=(\d+):(\d+):(\d+)\.(\d+)\s+bitrate=\s*([\d.]+)kbits/s\s+speed=\s*([\d.]+)x`)
-
-// ParseProgressLine parses a line from FFmpeg's default stderr output
-// This is a fallback for older FFmpeg versions that don't support -progress pipe
-func ParseProgressLine(line string, duration time.Duration) *Progress {
-	matches := progressRegex.FindStringSubmatch(line)
-	if matches == nil {
-		return nil
-	}
-
-	frame, _ := strconv.ParseInt(matches[1], 10, 64)
-	fps, _ := strconv.ParseFloat(matches[2], 64)
-	sizeKB, _ := strconv.ParseInt(matches[3], 10, 64)
-	hours, _ := strconv.ParseInt(matches[4], 10, 64)
-	mins, _ := strconv.ParseInt(matches[5], 10, 64)
-	secs, _ := strconv.ParseInt(matches[6], 10, 64)
-	ms, _ := strconv.ParseInt(matches[7], 10, 64)
-	bitrate, _ := strconv.ParseFloat(matches[8], 64)
-	speed, _ := strconv.ParseFloat(matches[9], 64)
-
-	currentTime := time.Duration(hours)*time.Hour +
-		time.Duration(mins)*time.Minute +
-		time.Duration(secs)*time.Second +
-		time.Duration(ms)*10*time.Millisecond
-
-	progress := &Progress{
-		Frame:   frame,
-		FPS:     fps,
-		Size:    sizeKB * 1024,
-		Time:    currentTime,
-		Bitrate: bitrate,
-		Speed:   speed,
-	}
-
-	if duration > 0 {
-		progress.Percent = float64(currentTime) / float64(duration) * 100
-		if progress.Speed > 0 {
-			remaining := duration - currentTime
-			progress.ETA = time.Duration(float64(remaining) / progress.Speed)
-		}
-	}
-
-	return progress
 }
