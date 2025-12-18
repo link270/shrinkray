@@ -27,9 +27,9 @@ Access the web interface at `http://localhost:8080`.
 ## Usage
 
 1. Browse to a folder containing video files
-2. Select files using checkboxes
+2. Select files
 3. Choose a preset
-4. Click "Add to Queue"
+4. Click "Transcode"
 
 Transcoding progress is displayed in the queue panel. Completed jobs show space saved and transcode duration.
 
@@ -39,8 +39,8 @@ If a transcoded file is larger than the original, the job fails and the original
 
 | Preset | Codec | Description |
 |--------|-------|-------------|
-| Compress (HEVC) | H.265 | Reduces file size |
-| Compress (AV1) | AV1 | Maximum compression |
+| Compress (HEVC) | H.265 | 50-60% size savings compared to H.264|
+| Compress (AV1) | AV1 | 60-75% size savings compared to H.264|
 | Downscale to 1080p | H.265 | Scales to 1080p max height |
 | Downscale to 720p | H.265 | Scales to 720p max height |
 
@@ -73,7 +73,3 @@ ffprobe_path: ffprobe
 
 - FFmpeg with HEVC and/or AV1 encoder support
 - Go 1.22+ (if building from source)
-
-## License
-
-MIT
