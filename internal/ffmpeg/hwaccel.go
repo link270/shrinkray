@@ -198,9 +198,10 @@ func testEncoder(ffmpegPath string, encoder string) bool {
 
 	// Try to encode a single frame from a test pattern
 	// This will fail fast if the hardware doesn't actually support the encoder
+	// Note: Use 256x256 resolution - some hardware encoders (QSV) have minimum resolution requirements
 	cmd := exec.CommandContext(ctx, ffmpegPath,
 		"-f", "lavfi",
-		"-i", "color=c=black:s=64x64:d=0.1",
+		"-i", "color=c=black:s=256x256:d=0.1",
 		"-frames:v", "1",
 		"-c:v", encoder,
 		"-f", "null",
