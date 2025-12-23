@@ -67,16 +67,20 @@ func (t *Transcoder) Transcode(
 	inputSize := inputInfo.Size()
 
 	// Build preset args with source bitrate for dynamic calculation
-	presetArgs := BuildPresetArgs(preset, sourceBitrate)
+	// inputArgs go before -i (hwaccel), outputArgs go after
+	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate)
 
 	// Build ffmpeg command
-	args := []string{
+	// Structure: ffmpeg [inputArgs] -i input [outputArgs] output
+	args := []string{}
+	args = append(args, inputArgs...)
+	args = append(args,
 		"-i", inputPath,
-		"-y", // Overwrite output without asking
+		"-y",                   // Overwrite output without asking
 		"-progress", "pipe:1", // Output progress to stdout
-		"-nostats", // Disable default stats output
-	}
-	args = append(args, presetArgs...)
+		"-nostats",            // Disable default stats output
+	)
+	args = append(args, outputArgs...)
 	args = append(args, outputPath)
 
 	cmd := exec.CommandContext(ctx, t.ffmpegPath, args...)

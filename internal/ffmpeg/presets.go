@@ -19,6 +19,8 @@ type encoderSettings struct {
 	quality     string   // Quality value (CRF or bitrate modifier)
 	extraArgs   []string // Additional encoder-specific args
 	usesBitrate bool     // If true, quality value is a bitrate modifier (0.0-1.0)
+	hwaccelArgs []string // Args to prepend before -i for hardware decoding
+	scaleFilter string   // Hardware-specific scale filter (e.g., "scale_qsv", "scale_cuda")
 }
 
 // Bitrate constraints for dynamic bitrate calculation (VideoToolbox)
@@ -34,6 +36,7 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		qualityFlag: "-crf",
 		quality:     "26",
 		extraArgs:   []string{"-preset", "medium"},
+		scaleFilter: "scale",
 	},
 	{HWAccelVideoToolbox, CodecHEVC}: {
 		// VideoToolbox uses bitrate control (-b:v) with dynamic calculation
@@ -43,24 +46,32 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		quality:     "0.35", // 35% of source bitrate (~50-60% smaller files)
 		extraArgs:   []string{"-allow_sw", "1"},
 		usesBitrate: true,
+		hwaccelArgs: []string{"-hwaccel", "videotoolbox"},
+		scaleFilter: "scale", // VideoToolbox doesn't have a HW scaler, use CPU
 	},
 	{HWAccelNVENC, CodecHEVC}: {
 		encoder:     "hevc_nvenc",
 		qualityFlag: "-cq",
 		quality:     "28",
 		extraArgs:   []string{"-preset", "p4", "-tune", "hq", "-rc", "vbr"},
+		hwaccelArgs: []string{"-hwaccel", "cuda", "-hwaccel_output_format", "cuda"},
+		scaleFilter: "scale_cuda",
 	},
 	{HWAccelQSV, CodecHEVC}: {
 		encoder:     "hevc_qsv",
 		qualityFlag: "-global_quality",
 		quality:     "27",
 		extraArgs:   []string{"-preset", "medium"},
+		hwaccelArgs: []string{"-hwaccel", "qsv", "-hwaccel_output_format", "qsv"},
+		scaleFilter: "scale_qsv",
 	},
 	{HWAccelVAAPI, CodecHEVC}: {
 		encoder:     "hevc_vaapi",
 		qualityFlag: "-qp",
 		quality:     "27",
 		extraArgs:   []string{},
+		hwaccelArgs: []string{"-vaapi_device", "", "-hwaccel", "vaapi", "-hwaccel_output_format", "vaapi"}, // Device path filled dynamically
+		scaleFilter: "scale_vaapi",
 	},
 
 	// AV1 encoders
@@ -70,6 +81,7 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		qualityFlag: "-crf",
 		quality:     "29",
 		extraArgs:   []string{"-preset", "6"},
+		scaleFilter: "scale",
 	},
 	{HWAccelVideoToolbox, CodecAV1}: {
 		// VideoToolbox AV1 (M3+ chips) uses bitrate control
@@ -78,24 +90,32 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		quality:     "0.40", // 40% of source bitrate
 		extraArgs:   []string{"-allow_sw", "1"},
 		usesBitrate: true,
+		hwaccelArgs: []string{"-hwaccel", "videotoolbox"},
+		scaleFilter: "scale", // VideoToolbox doesn't have a HW scaler, use CPU
 	},
 	{HWAccelNVENC, CodecAV1}: {
 		encoder:     "av1_nvenc",
 		qualityFlag: "-cq",
 		quality:     "25",
 		extraArgs:   []string{"-preset", "p4", "-tune", "hq", "-rc", "vbr"},
+		hwaccelArgs: []string{"-hwaccel", "cuda", "-hwaccel_output_format", "cuda"},
+		scaleFilter: "scale_cuda",
 	},
 	{HWAccelQSV, CodecAV1}: {
 		encoder:     "av1_qsv",
 		qualityFlag: "-global_quality",
 		quality:     "24",
 		extraArgs:   []string{"-preset", "medium"},
+		hwaccelArgs: []string{"-hwaccel", "qsv", "-hwaccel_output_format", "qsv"},
+		scaleFilter: "scale_qsv",
 	},
 	{HWAccelVAAPI, CodecAV1}: {
 		encoder:     "av1_vaapi",
 		qualityFlag: "-qp",
 		quality:     "24",
 		extraArgs:   []string{},
+		hwaccelArgs: []string{"-vaapi_device", "", "-hwaccel", "vaapi", "-hwaccel_output_format", "vaapi"}, // Device path filled dynamically
+		scaleFilter: "scale_vaapi",
 	},
 }
 
@@ -115,7 +135,8 @@ var BasePresets = []struct {
 
 // BuildPresetArgs builds FFmpeg arguments for a preset with the specified encoder
 // sourceBitrate is the source video bitrate in bits/second (used for dynamic bitrate calculation)
-func BuildPresetArgs(preset *Preset, sourceBitrate int64) []string {
+// Returns (inputArgs, outputArgs) - inputArgs go before -i, outputArgs go after
+func BuildPresetArgs(preset *Preset, sourceBitrate int64) (inputArgs []string, outputArgs []string) {
 	key := EncoderKey{preset.Encoder, preset.Codec}
 	config, ok := encoderConfigs[key]
 	if !ok {
@@ -123,24 +144,32 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64) []string {
 		config = encoderConfigs[EncoderKey{HWAccelNone, preset.Codec}]
 	}
 
-	args := []string{}
+	// Input args: hardware acceleration for decoding
+	// Make a copy to avoid modifying the original config
+	for _, arg := range config.hwaccelArgs {
+		// Fill in VAAPI device path dynamically
+		if arg == "" && len(inputArgs) > 0 && inputArgs[len(inputArgs)-1] == "-vaapi_device" {
+			arg = GetVAAPIDevice()
+		}
+		inputArgs = append(inputArgs, arg)
+	}
+
+	// Output args
+	outputArgs = []string{}
 
 	// Add scaling filter if needed
 	if preset.MaxHeight > 0 {
-		// For VAAPI, we need to use a different filter chain
-		if preset.Encoder == HWAccelVAAPI {
-			args = append(args,
-				"-vf", fmt.Sprintf("format=nv12,hwupload,scale_vaapi=-2:'min(ih,%d)'", preset.MaxHeight),
-			)
-		} else {
-			args = append(args,
-				"-vf", fmt.Sprintf("scale=-2:'min(ih,%d)'", preset.MaxHeight),
-			)
+		scaleFilter := config.scaleFilter
+		if scaleFilter == "" {
+			scaleFilter = "scale"
 		}
+		outputArgs = append(outputArgs,
+			"-vf", fmt.Sprintf("%s=-2:'min(ih,%d)'", scaleFilter, preset.MaxHeight),
+		)
 	}
 
 	// Add encoder
-	args = append(args, "-c:v", config.encoder)
+	outputArgs = append(outputArgs, "-c:v", config.encoder)
 
 	// Get quality setting
 	qualityStr := config.quality
@@ -165,25 +194,19 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64) []string {
 		qualityStr = fmt.Sprintf("%dk", targetKbps)
 	}
 
-	args = append(args, config.qualityFlag, qualityStr)
+	outputArgs = append(outputArgs, config.qualityFlag, qualityStr)
 
 	// Add encoder-specific extra args
-	args = append(args, config.extraArgs...)
+	outputArgs = append(outputArgs, config.extraArgs...)
 
 	// Add stream mapping and copy audio/subtitles
-	args = append(args,
+	outputArgs = append(outputArgs,
 		"-map", "0",
 		"-c:a", "copy",
 		"-c:s", "copy",
 	)
 
-	// For VAAPI, need to specify the device
-	if preset.Encoder == HWAccelVAAPI {
-		// Prepend hardware device initialization
-		args = append([]string{"-vaapi_device", "/dev/dri/renderD128"}, args...)
-	}
-
-	return args
+	return inputArgs, outputArgs
 }
 
 // GeneratePresets creates presets using the best available encoder for each codec

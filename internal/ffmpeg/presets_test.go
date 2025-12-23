@@ -18,15 +18,21 @@ func TestBuildPresetArgsDynamicBitrate(t *testing.T) {
 		Codec:   CodecHEVC,
 	}
 
-	args := BuildPresetArgs(preset, sourceBitrate)
+	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate)
+
+	// Should have hwaccel input args
+	if len(inputArgs) == 0 {
+		t.Error("expected hwaccel input args for VideoToolbox")
+	}
+	t.Logf("Input args: %v", inputArgs)
 
 	// Should contain -b:v with calculated bitrate
 	// Expected: 3481 * 0.35 = ~1218k
 	found := false
-	for i, arg := range args {
-		if arg == "-b:v" && i+1 < len(args) {
+	for i, arg := range outputArgs {
+		if arg == "-b:v" && i+1 < len(outputArgs) {
 			found = true
-			bitrate := args[i+1]
+			bitrate := outputArgs[i+1]
 			if !strings.HasSuffix(bitrate, "k") {
 				t.Errorf("expected bitrate to end in 'k', got %s", bitrate)
 			}
@@ -53,12 +59,18 @@ func TestBuildPresetArgsDynamicBitrateAV1(t *testing.T) {
 		Codec:   CodecAV1,
 	}
 
-	args := BuildPresetArgs(preset, sourceBitrate)
+	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate)
+
+	// Should have hwaccel input args
+	if len(inputArgs) == 0 {
+		t.Error("expected hwaccel input args for VideoToolbox")
+	}
+	t.Logf("Input args: %v", inputArgs)
 
 	// Expected: 3481 * 0.40 = ~1392k
-	for i, arg := range args {
-		if arg == "-b:v" && i+1 < len(args) {
-			bitrate := args[i+1]
+	for i, arg := range outputArgs {
+		if arg == "-b:v" && i+1 < len(outputArgs) {
+			bitrate := outputArgs[i+1]
 			t.Logf("AV1 VideoToolbox: source=%dkbps → target=%s", sourceBitrate/1000, bitrate)
 
 			if bitrate != "1392k" {
@@ -80,10 +92,10 @@ func TestBuildPresetArgsBitrateConstraints(t *testing.T) {
 		Codec:   CodecHEVC,
 	}
 
-	args := BuildPresetArgs(presetLow, lowBitrate)
-	for i, arg := range args {
-		if arg == "-b:v" && i+1 < len(args) {
-			bitrate := args[i+1]
+	_, outputArgs := BuildPresetArgs(presetLow, lowBitrate)
+	for i, arg := range outputArgs {
+		if arg == "-b:v" && i+1 < len(outputArgs) {
+			bitrate := outputArgs[i+1]
 			t.Logf("Low bitrate source: %dkbps → target=%s", lowBitrate/1000, bitrate)
 
 			if bitrate != "500k" {
@@ -101,10 +113,10 @@ func TestBuildPresetArgsBitrateConstraints(t *testing.T) {
 		Codec:   CodecHEVC,
 	}
 
-	args = BuildPresetArgs(presetHigh, highBitrate)
-	for i, arg := range args {
-		if arg == "-b:v" && i+1 < len(args) {
-			bitrate := args[i+1]
+	_, outputArgs = BuildPresetArgs(presetHigh, highBitrate)
+	for i, arg := range outputArgs {
+		if arg == "-b:v" && i+1 < len(outputArgs) {
+			bitrate := outputArgs[i+1]
 			t.Logf("High bitrate source: %dkbps → target=%s", highBitrate/1000, bitrate)
 
 			if bitrate != "15000k" {
@@ -124,17 +136,22 @@ func TestBuildPresetArgsNonBitrateEncoder(t *testing.T) {
 		Codec:   CodecHEVC,
 	}
 
-	args := BuildPresetArgs(presetSoftware, sourceBitrate)
+	inputArgs, outputArgs := BuildPresetArgs(presetSoftware, sourceBitrate)
+
+	// Software encoder should have no hwaccel input args
+	if len(inputArgs) != 0 {
+		t.Errorf("expected no hwaccel input args for software encoder, got %v", inputArgs)
+	}
 
 	// Should use -crf not -b:v
 	foundCRF := false
 	foundBv := false
-	for i, arg := range args {
+	for i, arg := range outputArgs {
 		if arg == "-crf" {
 			foundCRF = true
 			// Verify CRF value is 26
-			if i+1 < len(args) && args[i+1] != "26" {
-				t.Errorf("expected CRF 26, got %s", args[i+1])
+			if i+1 < len(outputArgs) && outputArgs[i+1] != "26" {
+				t.Errorf("expected CRF 26, got %s", outputArgs[i+1])
 			}
 		}
 		if arg == "-b:v" {
@@ -149,7 +166,7 @@ func TestBuildPresetArgsNonBitrateEncoder(t *testing.T) {
 		t.Error("software encoder should not use -b:v")
 	}
 
-	t.Logf("Software encoder args: %v", args)
+	t.Logf("Software encoder args: %v", outputArgs)
 }
 
 func TestBuildPresetArgsZeroBitrate(t *testing.T) {
@@ -160,12 +177,17 @@ func TestBuildPresetArgsZeroBitrate(t *testing.T) {
 		Codec:   CodecHEVC,
 	}
 
-	args := BuildPresetArgs(presetVT, 0)
+	inputArgs, outputArgs := BuildPresetArgs(presetVT, 0)
+
+	// Should still have hwaccel input args
+	if len(inputArgs) == 0 {
+		t.Error("expected hwaccel input args for VideoToolbox")
+	}
 
 	// Should still have -b:v but with raw modifier value
-	for i, arg := range args {
-		if arg == "-b:v" && i+1 < len(args) {
-			bitrate := args[i+1]
+	for i, arg := range outputArgs {
+		if arg == "-b:v" && i+1 < len(outputArgs) {
+			bitrate := outputArgs[i+1]
 			t.Logf("Zero bitrate source → target=%s", bitrate)
 			// Should fall back to the raw modifier value "0.35"
 			if bitrate != "0.35" {

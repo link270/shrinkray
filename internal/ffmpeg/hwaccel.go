@@ -2,7 +2,10 @@ package ffmpeg
 
 import (
 	"context"
+	"os"
 	"os/exec"
+	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -45,9 +48,10 @@ type EncoderKey struct {
 
 // AvailableEncoders holds the detected hardware encoders
 type AvailableEncoders struct {
-	mu       sync.RWMutex
-	encoders map[EncoderKey]*HWEncoder
-	detected bool
+	mu          sync.RWMutex
+	encoders    map[EncoderKey]*HWEncoder
+	detected    bool
+	vaapiDevice string // Auto-detected VAAPI device path (e.g., /dev/dri/renderD128)
 }
 
 // Global encoder detection cache
@@ -191,22 +195,63 @@ func DetectEncoders(ffmpegPath string) map[EncoderKey]*HWEncoder {
 	return copyEncoders(availableEncoders.encoders)
 }
 
+// detectVAAPIDevice finds the first available VAAPI render device
+func detectVAAPIDevice() string {
+	driPath := "/dev/dri"
+	entries, err := os.ReadDir(driPath)
+	if err != nil {
+		return ""
+	}
+
+	// Collect all renderD* devices
+	var devices []string
+	for _, entry := range entries {
+		if strings.HasPrefix(entry.Name(), "renderD") {
+			devices = append(devices, filepath.Join(driPath, entry.Name()))
+		}
+	}
+
+	// Sort to get consistent ordering (renderD128, renderD129, etc.)
+	sort.Strings(devices)
+
+	// Return the first one found
+	if len(devices) > 0 {
+		return devices[0]
+	}
+	return ""
+}
+
 // testEncoder tries a quick test encode to verify hardware encoder actually works
 func testEncoder(ffmpegPath string, encoder string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Try to encode a single frame from a test pattern
-	// This will fail fast if the hardware doesn't actually support the encoder
-	// Note: Use 256x256 resolution - some hardware encoders (QSV) have minimum resolution requirements
-	cmd := exec.CommandContext(ctx, ffmpegPath,
+	// Build base args
+	args := []string{
 		"-f", "lavfi",
 		"-i", "color=c=black:s=256x256:d=0.1",
 		"-frames:v", "1",
 		"-c:v", encoder,
 		"-f", "null",
 		"-",
-	)
+	}
+
+	// For VAAPI encoders, we need to specify the device
+	if strings.Contains(encoder, "vaapi") {
+		device := detectVAAPIDevice()
+		if device == "" {
+			return false // No VAAPI device found
+		}
+		// Store the detected device for later use
+		availableEncoders.vaapiDevice = device
+		// Prepend VAAPI device args
+		args = append([]string{"-vaapi_device", device}, args...)
+	}
+
+	// Try to encode a single frame from a test pattern
+	// This will fail fast if the hardware doesn't actually support the encoder
+	// Note: Use 256x256 resolution - some hardware encoders (QSV) have minimum resolution requirements
+	cmd := exec.CommandContext(ctx, ffmpegPath, args...)
 
 	// We don't care about output, just whether it succeeds
 	err := cmd.Run()
@@ -218,6 +263,17 @@ func GetAvailableEncoders() map[EncoderKey]*HWEncoder {
 	availableEncoders.mu.RLock()
 	defer availableEncoders.mu.RUnlock()
 	return copyEncoders(availableEncoders.encoders)
+}
+
+// GetVAAPIDevice returns the auto-detected VAAPI device path, or a default
+func GetVAAPIDevice() string {
+	availableEncoders.mu.RLock()
+	defer availableEncoders.mu.RUnlock()
+	if availableEncoders.vaapiDevice != "" {
+		return availableEncoders.vaapiDevice
+	}
+	// Fallback to common default
+	return "/dev/dri/renderD128"
 }
 
 // GetEncoderByKey returns a specific encoder by accel type and codec
