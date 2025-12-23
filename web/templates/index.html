@@ -1251,12 +1251,14 @@
                     return;
                 }
 
-                // Check if there are any video files
-                const hasVideos = data.entries.some(e => !e.is_dir && e.video_info);
+                // Check if there are any selectable items (videos or folders with videos)
+                const hasSelectableItems = data.entries.some(e =>
+                    (!e.is_dir && e.video_info) || (e.is_dir && (e.file_count || 0) > 0)
+                );
                 const header = document.getElementById('file-list-header');
                 const selectAllCheckbox = document.getElementById('select-all-checkbox');
 
-                if (hasVideos) {
+                if (hasSelectableItems) {
                     header.classList.remove('hidden');
                 } else {
                     header.classList.add('hidden');
@@ -1266,6 +1268,8 @@
 
                 list.innerHTML = data.entries.map(entry => {
                     const isVideo = !entry.is_dir && entry.video_info;
+                    const hasVideos = entry.is_dir && (entry.file_count || 0) > 0;
+                    const isSelectable = isVideo || hasVideos;
                     const iconClass = entry.is_dir ? 'folder' : (isVideo ? 'video' : 'other');
                     const icon = entry.is_dir
                         ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`
@@ -1291,7 +1295,7 @@
                     }
 
                     return `<li class="file-item" data-path="${entry.path}" data-is-dir="${entry.is_dir}" onclick="handleFileClick(this, event)">
-                        ${isVideo ? `<input type="checkbox" class="file-checkbox" onclick="handleCheckbox(this, event)" data-path="${entry.path}">` : '<div style="width: 18px"></div>'}
+                        ${isSelectable ? `<input type="checkbox" class="file-checkbox" onclick="handleCheckbox(this, event)" data-path="${entry.path}">` : '<div style="width: 18px"></div>'}
                         <div class="file-icon ${iconClass}">${icon}</div>
                         <div class="file-info">
                             <div class="file-name">${entry.name}</div>
