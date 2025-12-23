@@ -38,3 +38,4 @@ testdata/
 # Housekeeping
 ghcr.sh
 CLAUDE.md
+config/shrinkray.yaml
