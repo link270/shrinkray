@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/graysonwilson/shrinkray/internal/browse"
@@ -22,6 +23,7 @@ type Handler struct {
 	cfg        *config.Config
 	cfgPath    string
 	pushover   *pushover.Client
+	notifyMu   sync.Mutex // Protects notification sending to prevent duplicates
 }
 
 // NewHandler creates a new API handler

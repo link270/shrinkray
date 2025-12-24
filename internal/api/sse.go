@@ -64,6 +64,10 @@ func (h *Handler) JobStream(w http.ResponseWriter, r *http.Request) {
 
 // checkAndSendNotification checks if all jobs are done and sends a Pushover notification if enabled
 func (h *Handler) checkAndSendNotification(w http.ResponseWriter, flusher http.Flusher) {
+	// Lock to prevent multiple concurrent notifications when multiple jobs finish simultaneously
+	h.notifyMu.Lock()
+	defer h.notifyMu.Unlock()
+
 	// Check if notification is enabled and Pushover is configured
 	if !h.cfg.NotifyOnComplete || !h.pushover.IsConfigured() {
 		return
