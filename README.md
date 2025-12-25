@@ -83,10 +83,26 @@ You'll receive a notification with job counts and total space saved when the que
 
 ## Configuration
 
-Config is stored in `/config/shrinkray.yaml`. Most settings are available in the WebUI, but you can also set:
+Config is stored in `/config/shrinkray.yaml`. Most settings are available in the WebUI, but you can also edit the file directly:
+
+| Setting | Default | Description |
+|---------|---------|-------------|
+| `media_path` | `/media` | Root directory to browse for media files |
+| `temp_path` | *(empty)* | Directory for temp files during transcode. If empty, uses same directory as source file |
+| `original_handling` | `replace` | What to do with originals: `replace` (delete) or `keep` (rename to `.old`) |
+| `workers` | `1` | Number of concurrent transcode jobs (1-6) |
+| `ffmpeg_path` | `ffmpeg` | Path to ffmpeg binary |
+| `ffprobe_path` | `ffprobe` | Path to ffprobe binary |
+| `pushover_user_key` | *(empty)* | Pushover user key for notifications |
+| `pushover_app_token` | *(empty)* | Pushover application token for notifications |
+
+Example:
 
 ```yaml
-temp_path: /tmp/shrinkray  # Use fast storage for temp files during transcode
+media_path: /media
+temp_path: /tmp/shrinkray
+original_handling: replace
+workers: 2
 ```
 
 ## Building from Source
