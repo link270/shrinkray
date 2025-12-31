@@ -1710,17 +1710,17 @@
             `;
         }
 
-        // Track render state for cancellation
-        let currentRenderID = 0;
+        // Infinite scroll state
+        const JOBS_PER_PAGE = 50;
+        let allSortedJobs = [];
+        let displayedJobCount = 0;
 
         function updateJobs(jobs) {
             const container = document.getElementById('queue-list');
 
-            // Cancel any in-progress render
-            currentRenderID++;
-            const thisRenderID = currentRenderID;
-
             if (!jobs || jobs.length === 0) {
+                allSortedJobs = [];
+                displayedJobCount = 0;
                 container.innerHTML = `
                     <div class="queue-empty">
                         <div class="queue-empty-icon">
@@ -1739,39 +1739,60 @@
 
             // Sort jobs by status: running first, then pending, failed, completed
             const statusOrder = { running: 0, pending: 1, failed: 2, complete: 3, cancelled: 4 };
-            const sortedJobs = [...jobs].sort((a, b) => {
+            allSortedJobs = [...jobs].sort((a, b) => {
                 const orderA = statusOrder[a.status] ?? 5;
                 const orderB = statusOrder[b.status] ?? 5;
                 return orderA - orderB;
             });
 
-            // Progressive rendering: render in batches to keep UI responsive
-            const BATCH_SIZE = 50;
+            // Render initial batch
+            displayedJobCount = 0;
             container.innerHTML = '';
+            loadMoreJobs();
+        }
 
-            function renderBatch(startIndex) {
-                // Check if this render was cancelled
-                if (thisRenderID !== currentRenderID) return;
+        function loadMoreJobs() {
+            if (displayedJobCount >= allSortedJobs.length) return;
 
-                const endIndex = Math.min(startIndex + BATCH_SIZE, sortedJobs.length);
-                const fragment = document.createDocumentFragment();
-                const temp = document.createElement('div');
+            const container = document.getElementById('queue-list');
+            const fragment = document.createDocumentFragment();
+            const temp = document.createElement('div');
 
-                for (let i = startIndex; i < endIndex; i++) {
-                    temp.innerHTML = renderJobHTML(sortedJobs[i]);
-                    fragment.appendChild(temp.firstElementChild);
-                }
-
-                container.appendChild(fragment);
-
-                // Schedule next batch if there are more jobs
-                if (endIndex < sortedJobs.length) {
-                    requestAnimationFrame(() => renderBatch(endIndex));
-                }
+            const endIndex = Math.min(displayedJobCount + JOBS_PER_PAGE, allSortedJobs.length);
+            for (let i = displayedJobCount; i < endIndex; i++) {
+                temp.innerHTML = renderJobHTML(allSortedJobs[i]);
+                fragment.appendChild(temp.firstElementChild);
             }
 
-            renderBatch(0);
+            // Remove existing "load more" indicator if present
+            const existingIndicator = container.querySelector('.load-more-indicator');
+            if (existingIndicator) existingIndicator.remove();
+
+            container.appendChild(fragment);
+            displayedJobCount = endIndex;
+
+            // Add "scroll for more" indicator if there are more jobs
+            if (displayedJobCount < allSortedJobs.length) {
+                const remaining = allSortedJobs.length - displayedJobCount;
+                const indicator = document.createElement('div');
+                indicator.className = 'load-more-indicator';
+                indicator.style.cssText = 'text-align: center; padding: 16px; color: var(--text-secondary); font-size: 0.875rem;';
+                indicator.textContent = `Scroll for ${remaining.toLocaleString()} more jobs...`;
+                container.appendChild(indicator);
+            }
         }
+
+        // Set up infinite scroll listener
+        (function setupInfiniteScroll() {
+            const container = document.getElementById('queue-list');
+            container.addEventListener('scroll', () => {
+                // Load more when scrolled near bottom (within 100px)
+                const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+                if (nearBottom && displayedJobCount < allSortedJobs.length) {
+                    loadMoreJobs();
+                }
+            });
+        })();
 
         function updateStats(stats) {
             document.getElementById('stat-pending').textContent = stats.pending;
