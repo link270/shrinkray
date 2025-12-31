@@ -40,6 +40,29 @@
             --transition-normal: 250ms ease;
         }
 
+        [data-theme="dark"] {
+            --bg-primary: #0F0F0F;
+            --bg-secondary: #1A1A1A;
+            --bg-tertiary: #252525;
+            --text-primary: #F5F5F5;
+            --text-secondary: #A0A0A0;
+            --text-tertiary: #6B6B6B;
+            --accent: #3B82F6;
+            --accent-hover: #60A5FA;
+            --accent-light: #1E3A5F;
+            --success: #10B981;
+            --success-light: #064E3B;
+            --warning: #F59E0B;
+            --warning-light: #78350F;
+            --error: #EF4444;
+            --error-light: #7F1D1D;
+            --border: #2D2D2D;
+            --border-hover: #404040;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.2);
+            --shadow-md: 0 4px 12px rgba(0,0,0,0.3);
+            --shadow-lg: 0 12px 32px rgba(0,0,0,0.4);
+        }
+
         * {
             box-sizing: border-box;
             margin: 0;
@@ -168,6 +191,12 @@
             width: 20px;
             height: 20px;
         }
+
+        /* Theme toggle icons */
+        .theme-icon-light { display: none; }
+        .theme-icon-dark { display: block; }
+        [data-theme="dark"] .theme-icon-light { display: block; }
+        [data-theme="dark"] .theme-icon-dark { display: none; }
 
         .main {
             flex: 1;
@@ -1041,6 +1070,22 @@
                 </div>
             </div>
             <div class="header-right">
+                <button class="menu-btn" onclick="toggleTheme()" title="Toggle dark mode" id="theme-toggle">
+                    <svg class="theme-icon-light" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <circle cx="12" cy="12" r="5"/>
+                        <line x1="12" y1="1" x2="12" y2="3"/>
+                        <line x1="12" y1="21" x2="12" y2="23"/>
+                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+                        <line x1="1" y1="12" x2="3" y2="12"/>
+                        <line x1="21" y1="12" x2="23" y2="12"/>
+                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/>
+                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>
+                    </svg>
+                    <svg class="theme-icon-dark" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+                    </svg>
+                </button>
                 <button class="menu-btn" onclick="openSettings()" title="Settings">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <circle cx="12" cy="12" r="3"/>
@@ -1217,6 +1262,22 @@
     </div>
 
     <script>
+        // Initialize theme immediately to prevent flash
+        (function initTheme() {
+            const saved = localStorage.getItem('theme');
+            if (saved === 'dark') {
+                document.documentElement.setAttribute('data-theme', 'dark');
+            }
+        })();
+
+        function toggleTheme() {
+            const html = document.documentElement;
+            const currentTheme = html.getAttribute('data-theme');
+            const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+            html.setAttribute('data-theme', newTheme);
+            localStorage.setItem('theme', newTheme);
+        }
+
         let currentPath = '';
         let selectedPaths = new Set();
         let eventSource = null;

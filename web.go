@@ -2,5 +2,5 @@ package shrinkray
 
 import "embed"
 
-//go:embed web/templates/* web/debug/*
+//go:embed web/templates/*
 var WebFS embed.FS
