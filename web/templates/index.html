@@ -689,6 +689,29 @@
             opacity: 0.5;
         }
 
+        /* Processing Banner */
+        .processing-banner {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            padding: 16px 20px;
+            background: var(--accent-light);
+            border-bottom: 1px solid var(--border);
+            color: var(--accent);
+            font-weight: 500;
+            font-size: 0.875rem;
+        }
+        .processing-banner.hidden { display: none; }
+        .processing-spinner {
+            width: 18px;
+            height: 18px;
+            border: 2px solid var(--accent);
+            border-top-color: transparent;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            flex-shrink: 0;
+        }
+
         .queue-footer {
             padding: 12px 20px;
             background: var(--bg-tertiary);
@@ -1146,6 +1169,10 @@
                             <span>Notify when done</span>
                         </label>
                     </div>
+                    <div id="processing-banner" class="processing-banner hidden">
+                        <div class="processing-spinner"></div>
+                        <span id="processing-text">Processing files...</span>
+                    </div>
                     <div class="queue-list" id="queue-list">
                         <div class="queue-empty">
                             <div class="queue-empty-icon">
@@ -1280,6 +1307,7 @@
 
         let currentPath = '';
         let selectedPaths = new Set();
+        let selectedFileCounts = new Map();  // Track file count for each selected path (1 for files, N for folders)
         let totalSelectableCount = 0;  // Track total selectable items to avoid DOM queries
         let eventSource = null;
 
@@ -1309,6 +1337,7 @@
 
                 currentPath = data.path;
                 selectedPaths.clear();
+                selectedFileCounts.clear();
                 updateButtons();
 
                 // Update breadcrumb
@@ -1358,6 +1387,8 @@
                             : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
 
                     let metaHtml = '';
+                    // For folders, file_count is the number of videos inside; for videos it's 1
+                    const fileCount = entry.is_dir ? (entry.file_count || 0) : (isVideo ? 1 : 0);
                     if (entry.is_dir) {
                         const count = entry.file_count || 0;
                         if (count > 0) {
@@ -1377,7 +1408,7 @@
                     }
 
                     return `<li class="file-item" data-path="${entry.path}" data-is-dir="${entry.is_dir}" onclick="handleFileClick(this, event)">
-                        ${isSelectable ? `<input type="checkbox" class="file-checkbox" onclick="handleCheckbox(this, event)" data-path="${entry.path}">` : '<div style="width: 18px"></div>'}
+                        ${isSelectable ? `<input type="checkbox" class="file-checkbox" onclick="handleCheckbox(this, event)" data-path="${entry.path}" data-file-count="${fileCount}">` : '<div style="width: 18px"></div>'}
                         <div class="file-icon ${iconClass}">${icon}</div>
                         <div class="file-info">
                             <div class="file-name">${entry.name}</div>
@@ -1395,13 +1426,16 @@
         function handleCheckbox(checkbox, event) {
             event.stopPropagation();
             const path = checkbox.dataset.path;
+            const fileCount = parseInt(checkbox.dataset.fileCount) || 1;
             const row = checkbox.closest('.file-item');
 
             if (checkbox.checked) {
                 selectedPaths.add(path);
+                selectedFileCounts.set(path, fileCount);
                 row.classList.add('selected');
             } else {
                 selectedPaths.delete(path);
+                selectedFileCounts.delete(path);
                 row.classList.remove('selected');
             }
             updateButtons();
@@ -1418,12 +1452,15 @@
             } else {
                 const checkbox = el.querySelector('.file-checkbox');
                 if (checkbox) {
+                    const fileCount = parseInt(checkbox.dataset.fileCount) || 1;
                     checkbox.checked = !checkbox.checked;
                     if (checkbox.checked) {
                         selectedPaths.add(path);
+                        selectedFileCounts.set(path, fileCount);
                         el.classList.add('selected');
                     } else {
                         selectedPaths.delete(path);
+                        selectedFileCounts.delete(path);
                         el.classList.remove('selected');
                     }
                     updateButtons();
@@ -1441,19 +1478,22 @@
                 items.push({
                     cb,
                     row: cb.closest('.file-item'),
-                    path: cb.dataset.path
+                    path: cb.dataset.path,
+                    fileCount: parseInt(cb.dataset.fileCount) || 1
                 });
             });
 
             // Clear or populate selectedPaths in one go
             if (isChecked) {
-                items.forEach(({cb, row, path}) => {
+                items.forEach(({cb, row, path, fileCount}) => {
                     cb.checked = true;
                     row.classList.add('selected');
                     selectedPaths.add(path);
+                    selectedFileCounts.set(path, fileCount);
                 });
             } else {
                 selectedPaths.clear();
+                selectedFileCounts.clear();
                 items.forEach(({cb, row}) => {
                     cb.checked = false;
                     row.classList.remove('selected');
@@ -1492,7 +1532,11 @@
 
             try {
                 const preset = document.getElementById('preset-select').value;
-                const pathCount = selectedPaths.size;
+                // Sum up total files: for folders use their file_count, for files use 1
+                let totalFiles = 0;
+                for (const count of selectedFileCounts.values()) {
+                    totalFiles += count;
+                }
 
                 const resp = await fetch('/api/jobs', {
                     method: 'POST',
@@ -1510,8 +1554,15 @@
                     return;
                 }
 
+                // Show processing indicator for async job creation
+                const banner = document.getElementById('processing-banner');
+                document.getElementById('processing-text').textContent =
+                    `Processing ${totalFiles} file${totalFiles !== 1 ? 's' : ''}...`;
+                banner.classList.remove('hidden');
+
                 // Clear selections immediately - jobs will appear via SSE as they're processed
                 selectedPaths.clear();
+                selectedFileCounts.clear();
                 document.querySelectorAll('.file-item.selected').forEach(el => {
                     el.classList.remove('selected');
                     const cb = el.querySelector('.file-checkbox');
@@ -1727,6 +1778,10 @@
                 } else if (data.type === 'notify_sent') {
                     // Notification was sent, uncheck the checkbox
                     document.getElementById('notify-checkbox').checked = false;
+                } else if (data.type === 'jobs_added') {
+                    // Batch of jobs finished processing, hide banner and refresh
+                    document.getElementById('processing-banner').classList.add('hidden');
+                    scheduleRefresh();
                 } else {
                     scheduleRefresh();
                     if (data.type === 'complete' || data.type === 'failed') {
