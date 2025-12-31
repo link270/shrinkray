@@ -316,6 +316,10 @@ func (b *Browser) GetVideoFilesWithProgress(ctx context.Context, paths []string,
 	}
 
 	// Second pass: probe files with progress updates
+	// Limit concurrent probes to prevent straggler problem and reduce system load
+	const maxConcurrent = 50
+	sem := make(chan struct{}, maxConcurrent)
+
 	var results []*ffmpeg.ProbeResult
 	var mu sync.Mutex
 	var wg sync.WaitGroup
@@ -325,6 +329,11 @@ func (b *Browser) GetVideoFilesWithProgress(ctx context.Context, paths []string,
 		wg.Add(1)
 		go func(fp string) {
 			defer wg.Done()
+
+			// Acquire semaphore slot (limits concurrent probes)
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
 			if result := b.getProbeResult(ctx, fp); result != nil {
 				mu.Lock()
 				results = append(results, result)
