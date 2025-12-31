@@ -1414,7 +1414,7 @@
                             <div class="file-name">${entry.name}</div>
                             <div class="file-meta">${metaHtml}</div>
                         </div>
-                        <div class="file-size">${formatBytes(entry.size)}</div>
+                        ${entry.is_dir ? '' : `<div class="file-size">${formatBytes(entry.size)}</div>`}
                     </li>`;
                 }).join('');
 
