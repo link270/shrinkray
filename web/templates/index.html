@@ -1607,7 +1607,15 @@
                 return;
             }
 
-            container.innerHTML = jobs.map(job => {
+            // Sort jobs by status: running first, then pending, failed, completed
+            const statusOrder = { running: 0, pending: 1, failed: 2, complete: 3, cancelled: 4 };
+            const sortedJobs = [...jobs].sort((a, b) => {
+                const orderA = statusOrder[a.status] ?? 5;
+                const orderB = statusOrder[b.status] ?? 5;
+                return orderA - orderB;
+            });
+
+            container.innerHTML = sortedJobs.map(job => {
                 const filename = job.input_path.split('/').pop();
                 const isInitializing = job.status === 'running' && job.progress === 0 && job.speed === 0;
                 const statusClass = isInitializing ? 'initializing' : job.status;
