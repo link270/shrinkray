@@ -486,30 +486,32 @@
                     return;
                 }
 
-                // Check if there are any video files
-                const hasVideos = data.entries.some(e => !e.is_dir && e.video_info);
+                // Check if there are any selectable items (videos or folders)
+                const hasSelectableItems = data.entries.some(e => (!e.is_dir && e.video_info) || e.is_dir);
                 const header = document.getElementById('file-list-header');
                 const selectAllCheckbox = document.getElementById('select-all-checkbox');
-                header.style.display = hasVideos ? 'flex' : 'none';
+                header.style.display = hasSelectableItems ? 'flex' : 'none';
                 selectAllCheckbox.checked = false;
                 selectAllCheckbox.indeterminate = false;
 
                 list.innerHTML = data.entries.map(entry => {
+                    const count = entry.file_count || 0;
                     const meta = entry.is_dir
-                        ? `${entry.file_count || 0} videos, ${formatBytes(entry.total_size || 0)}`
+                        ? (count > 0 ? `${count} videos, ${formatBytes(entry.total_size || 0)}` : '')
                         : entry.video_info
                             ? `${entry.video_info.video_codec} ${entry.video_info.width}x${entry.video_info.height}, ${formatBytes(entry.size)}`
                             : formatBytes(entry.size);
 
                     const cls = entry.is_dir ? 'dir' : (entry.video_info ? 'video' : '');
                     const isVideo = !entry.is_dir && entry.video_info;
+                    const isSelectable = isVideo || entry.is_dir;
                     const icon = entry.is_dir ? '📁' : (entry.video_info ? '🎬' : '📄');
 
                     return `<li class="file-item ${cls}"
                         data-path="${entry.path}"
                         data-is-dir="${entry.is_dir}"
                         onclick="handleFileClick(this, event)">
-                        ${isVideo ? `<input type="checkbox" class="file-checkbox" onclick="handleCheckbox(this, event)" data-path="${entry.path}">` : ''}
+                        ${isSelectable ? `<input type="checkbox" class="file-checkbox" onclick="handleCheckbox(this, event)" data-path="${entry.path}">` : ''}
                         <span class="file-icon">${icon}</span>
                         <span class="file-name">${entry.name}</span>
                         <span class="file-meta">${meta}</span>
