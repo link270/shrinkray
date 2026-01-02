@@ -45,20 +45,32 @@ type Config struct {
 
 	// QualityAV1 is the CRF value for AV1 encoding (lower = higher quality, default 35)
 	QualityAV1 int `yaml:"quality_av1"`
+
+	// ScheduleEnabled enables time-based scheduling for transcoding
+	ScheduleEnabled bool `yaml:"schedule_enabled"`
+
+	// ScheduleStartHour is when transcoding is allowed to start (0-23, default 22 = 10 PM)
+	ScheduleStartHour int `yaml:"schedule_start_hour"`
+
+	// ScheduleEndHour is when transcoding must stop (0-23, default 6 = 6 AM)
+	ScheduleEndHour int `yaml:"schedule_end_hour"`
 }
 
 // DefaultConfig returns a config with sensible defaults
 func DefaultConfig() *Config {
 	return &Config{
-		MediaPath:        "/media",
-		TempPath:         "", // same directory as source
-		OriginalHandling: "replace",
-		Workers:          1,
-		FFmpegPath:       "ffmpeg",
-		FFprobePath:      "ffprobe",
-		QueueFile:        "",
-		QualityHEVC:      26,
-		QualityAV1:       35,
+		MediaPath:         "/media",
+		TempPath:          "", // same directory as source
+		OriginalHandling:  "replace",
+		Workers:           1,
+		FFmpegPath:        "ffmpeg",
+		FFprobePath:       "ffprobe",
+		QueueFile:         "",
+		QualityHEVC:       26,
+		QualityAV1:        35,
+		ScheduleEnabled:   false,
+		ScheduleStartHour: 22, // 10 PM
+		ScheduleEndHour:   6,  // 6 AM
 	}
 }
 

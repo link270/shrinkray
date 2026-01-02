@@ -517,6 +517,19 @@
             color: var(--text-secondary);
         }
 
+        .schedule-status {
+            font-size: 0.8125rem;
+            color: var(--text-tertiary);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .schedule-status svg {
+            width: 14px;
+            height: 14px;
+        }
+
         /* Queue Panel */
         .queue-panel {
             width: 400px;
@@ -1267,6 +1280,7 @@
                         </select>
                         <button class="btn btn-primary" onclick="startJobs()" id="start-btn" disabled>Start Transcode</button>
                         <span class="selection-count" id="selection-summary"></span>
+                        <span class="schedule-status" id="schedule-status"></span>
                     </div>
                 </div>
             </div>
@@ -1355,6 +1369,31 @@
                                 <option value="4">4</option>
                                 <option value="5">5</option>
                                 <option value="6">6</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <div class="setting-group-title">Schedule</div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">Enable scheduling</div>
+                            <div class="setting-desc">Only transcode during set hours</div>
+                        </div>
+                        <div class="setting-control">
+                            <input type="checkbox" id="setting-schedule-enabled" onchange="updateScheduleSetting()">
+                        </div>
+                    </div>
+                    <div class="setting-item" id="schedule-hours-row">
+                        <div class="setting-info">
+                            <div class="setting-name">Transcode window</div>
+                            <div class="setting-desc">Start and end time</div>
+                        </div>
+                        <div class="setting-control" style="display: flex; gap: 8px; align-items: center;">
+                            <select class="setting-select" id="setting-schedule-start" style="min-width: 100px" onchange="updateScheduleSetting()">
+                            </select>
+                            <span style="color: var(--text-secondary)">to</span>
+                            <select class="setting-select" id="setting-schedule-end" style="min-width: 100px" onchange="updateScheduleSetting()">
                             </select>
                         </div>
                     </div>
@@ -2073,6 +2112,13 @@
                 document.getElementById('setting-quality-hevc-input').value = hevcQuality;
                 document.getElementById('setting-quality-av1').value = av1Quality;
                 document.getElementById('setting-quality-av1-input').value = av1Quality;
+
+                // Schedule settings
+                document.getElementById('setting-schedule-enabled').checked = config.schedule_enabled || false;
+                document.getElementById('setting-schedule-start').value = config.schedule_start_hour ?? 22;
+                document.getElementById('setting-schedule-end').value = config.schedule_end_hour ?? 6;
+                updateScheduleHoursVisibility();
+                updateScheduleStatusDisplay(config.schedule_enabled, config.schedule_start_hour ?? 22, config.schedule_end_hour ?? 6);
             } catch (err) {
                 console.error('Load settings error:', err);
             }
@@ -2097,6 +2143,76 @@
 
         function toggleAdvancedSettings() {
             document.getElementById('advanced-settings').classList.toggle('collapsed');
+        }
+
+        // Schedule functions
+        function formatHour(hour) {
+            if (hour === 0) return '12 AM';
+            if (hour === 12) return '12 PM';
+            if (hour < 12) return hour + ' AM';
+            return (hour - 12) + ' PM';
+        }
+
+        function populateHourDropdowns() {
+            const startSelect = document.getElementById('setting-schedule-start');
+            const endSelect = document.getElementById('setting-schedule-end');
+            let options = '';
+            for (let h = 0; h < 24; h++) {
+                options += `<option value="${h}">${formatHour(h)}</option>`;
+            }
+            startSelect.innerHTML = options;
+            endSelect.innerHTML = options;
+        }
+
+        function updateScheduleHoursVisibility() {
+            const enabled = document.getElementById('setting-schedule-enabled').checked;
+            const hoursRow = document.getElementById('schedule-hours-row');
+            hoursRow.style.opacity = enabled ? '1' : '0.5';
+            hoursRow.style.pointerEvents = enabled ? 'auto' : 'none';
+        }
+
+        function updateScheduleStatusDisplay(enabled, startHour, endHour) {
+            const statusEl = document.getElementById('schedule-status');
+            if (!enabled) {
+                statusEl.innerHTML = '';
+                return;
+            }
+            const clockIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
+            statusEl.innerHTML = `${clockIcon} ${formatHour(startHour)} – ${formatHour(endHour)}`;
+        }
+
+        async function updateScheduleSetting() {
+            const enabled = document.getElementById('setting-schedule-enabled').checked;
+            const startHour = parseInt(document.getElementById('setting-schedule-start').value);
+            const endHour = parseInt(document.getElementById('setting-schedule-end').value);
+
+            updateScheduleHoursVisibility();
+            updateScheduleStatusDisplay(enabled, startHour, endHour);
+
+            const statusEl = document.getElementById('settings-status');
+            try {
+                const resp = await fetch('/api/config', {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        schedule_enabled: enabled,
+                        schedule_start_hour: startHour,
+                        schedule_end_hour: endHour
+                    })
+                });
+
+                if (!resp.ok) {
+                    const data = await resp.json();
+                    throw new Error(data.error || 'Failed to update');
+                }
+
+                statusEl.textContent = 'Settings saved';
+                statusEl.className = 'settings-status';
+                setTimeout(() => { statusEl.textContent = ''; }, 2000);
+            } catch (err) {
+                statusEl.textContent = `Error: ${err.message}`;
+                statusEl.className = 'settings-status error';
+            }
         }
 
         async function updateSetting(key, value) {
@@ -2188,6 +2304,7 @@
         });
 
         // Initialize
+        populateHourDropdowns();
         browse();
         connectSSE();
         loadSettings();

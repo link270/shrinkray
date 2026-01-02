@@ -235,6 +235,16 @@ func (w *Worker) run() {
 		case <-w.ctx.Done():
 			return
 		default:
+			// Check if schedule allows transcoding
+			if !w.isScheduleAllowed() {
+				select {
+				case <-w.ctx.Done():
+					return
+				case <-time.After(30 * time.Second):
+					continue
+				}
+			}
+
 			// Try to get next job
 			job := w.queue.GetNext()
 			if job == nil {
@@ -251,6 +261,25 @@ func (w *Worker) run() {
 			w.processJob(job)
 		}
 	}
+}
+
+// isScheduleAllowed checks if the current time is within the allowed schedule
+func (w *Worker) isScheduleAllowed() bool {
+	if !w.cfg.ScheduleEnabled {
+		return true
+	}
+
+	hour := time.Now().Hour()
+	start := w.cfg.ScheduleStartHour
+	end := w.cfg.ScheduleEndHour
+
+	// Handle overnight windows (e.g., 22:00 to 06:00)
+	if start > end {
+		return hour >= start || hour < end
+	}
+
+	// Handle daytime windows (e.g., 09:00 to 17:00)
+	return hour >= start && hour < end
 }
 
 // processJob handles a single transcoding job

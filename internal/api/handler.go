@@ -234,18 +234,24 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		"notify_on_complete":    h.cfg.NotifyOnComplete,
 		"quality_hevc":          h.cfg.QualityHEVC,
 		"quality_av1":           h.cfg.QualityAV1,
+		"schedule_enabled":      h.cfg.ScheduleEnabled,
+		"schedule_start_hour":   h.cfg.ScheduleStartHour,
+		"schedule_end_hour":     h.cfg.ScheduleEndHour,
 	})
 }
 
 // UpdateConfigRequest is the request body for updating config
 type UpdateConfigRequest struct {
-	OriginalHandling *string `json:"original_handling,omitempty"`
-	Workers          *int    `json:"workers,omitempty"`
-	PushoverUserKey  *string `json:"pushover_user_key,omitempty"`
-	PushoverAppToken *string `json:"pushover_app_token,omitempty"`
-	NotifyOnComplete *bool   `json:"notify_on_complete,omitempty"`
-	QualityHEVC      *int    `json:"quality_hevc,omitempty"`
-	QualityAV1       *int    `json:"quality_av1,omitempty"`
+	OriginalHandling  *string `json:"original_handling,omitempty"`
+	Workers           *int    `json:"workers,omitempty"`
+	PushoverUserKey   *string `json:"pushover_user_key,omitempty"`
+	PushoverAppToken  *string `json:"pushover_app_token,omitempty"`
+	NotifyOnComplete  *bool   `json:"notify_on_complete,omitempty"`
+	QualityHEVC       *int    `json:"quality_hevc,omitempty"`
+	QualityAV1        *int    `json:"quality_av1,omitempty"`
+	ScheduleEnabled   *bool   `json:"schedule_enabled,omitempty"`
+	ScheduleStartHour *int    `json:"schedule_start_hour,omitempty"`
+	ScheduleEndHour   *int    `json:"schedule_end_hour,omitempty"`
 }
 
 // UpdateConfig handles PUT /api/config
@@ -303,6 +309,27 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.cfg.QualityAV1 = quality
+	}
+
+	// Handle schedule settings
+	if req.ScheduleEnabled != nil {
+		h.cfg.ScheduleEnabled = *req.ScheduleEnabled
+	}
+	if req.ScheduleStartHour != nil {
+		hour := *req.ScheduleStartHour
+		if hour < 0 || hour > 23 {
+			writeError(w, http.StatusBadRequest, "schedule_start_hour must be between 0 and 23")
+			return
+		}
+		h.cfg.ScheduleStartHour = hour
+	}
+	if req.ScheduleEndHour != nil {
+		hour := *req.ScheduleEndHour
+		if hour < 0 || hour > 23 {
+			writeError(w, http.StatusBadRequest, "schedule_end_hour must be between 0 and 23")
+			return
+		}
+		h.cfg.ScheduleEndHour = hour
 	}
 
 	// Persist config to disk
