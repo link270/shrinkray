@@ -232,6 +232,8 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		"pushover_app_token":    h.cfg.PushoverAppToken,
 		"pushover_configured":   h.pushover.IsConfigured(),
 		"notify_on_complete":    h.cfg.NotifyOnComplete,
+		"quality_hevc":          h.cfg.QualityHEVC,
+		"quality_av1":           h.cfg.QualityAV1,
 	})
 }
 
@@ -242,6 +244,8 @@ type UpdateConfigRequest struct {
 	PushoverUserKey  *string `json:"pushover_user_key,omitempty"`
 	PushoverAppToken *string `json:"pushover_app_token,omitempty"`
 	NotifyOnComplete *bool   `json:"notify_on_complete,omitempty"`
+	QualityHEVC      *int    `json:"quality_hevc,omitempty"`
+	QualityAV1       *int    `json:"quality_av1,omitempty"`
 }
 
 // UpdateConfig handles PUT /api/config
@@ -281,6 +285,24 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.NotifyOnComplete != nil {
 		h.cfg.NotifyOnComplete = *req.NotifyOnComplete
+	}
+
+	// Handle quality settings
+	if req.QualityHEVC != nil {
+		quality := *req.QualityHEVC
+		if quality < 15 || quality > 40 {
+			writeError(w, http.StatusBadRequest, "quality_hevc must be between 15 and 40")
+			return
+		}
+		h.cfg.QualityHEVC = quality
+	}
+	if req.QualityAV1 != nil {
+		quality := *req.QualityAV1
+		if quality < 20 || quality > 50 {
+			writeError(w, http.StatusBadRequest, "quality_av1 must be between 20 and 50")
+			return
+		}
+		h.cfg.QualityAV1 = quality
 	}
 
 	// Persist config to disk

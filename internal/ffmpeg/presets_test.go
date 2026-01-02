@@ -18,7 +18,7 @@ func TestBuildPresetArgsDynamicBitrate(t *testing.T) {
 		Codec:   CodecHEVC,
 	}
 
-	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate)
+	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, 0, 0)
 
 	// Should have hwaccel input args
 	if len(inputArgs) == 0 {
@@ -59,7 +59,7 @@ func TestBuildPresetArgsDynamicBitrateAV1(t *testing.T) {
 		Codec:   CodecAV1,
 	}
 
-	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate)
+	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, 0, 0)
 
 	// Should have hwaccel input args
 	if len(inputArgs) == 0 {
@@ -92,7 +92,7 @@ func TestBuildPresetArgsBitrateConstraints(t *testing.T) {
 		Codec:   CodecHEVC,
 	}
 
-	_, outputArgs := BuildPresetArgs(presetLow, lowBitrate)
+	_, outputArgs := BuildPresetArgs(presetLow, lowBitrate, 0, 0)
 	for i, arg := range outputArgs {
 		if arg == "-b:v" && i+1 < len(outputArgs) {
 			bitrate := outputArgs[i+1]
@@ -113,7 +113,7 @@ func TestBuildPresetArgsBitrateConstraints(t *testing.T) {
 		Codec:   CodecHEVC,
 	}
 
-	_, outputArgs = BuildPresetArgs(presetHigh, highBitrate)
+	_, outputArgs = BuildPresetArgs(presetHigh, highBitrate, 0, 0)
 	for i, arg := range outputArgs {
 		if arg == "-b:v" && i+1 < len(outputArgs) {
 			bitrate := outputArgs[i+1]
@@ -136,7 +136,7 @@ func TestBuildPresetArgsNonBitrateEncoder(t *testing.T) {
 		Codec:   CodecHEVC,
 	}
 
-	inputArgs, outputArgs := BuildPresetArgs(presetSoftware, sourceBitrate)
+	inputArgs, outputArgs := BuildPresetArgs(presetSoftware, sourceBitrate, 0, 0)
 
 	// Software encoder should have no hwaccel input args
 	if len(inputArgs) != 0 {
@@ -177,7 +177,7 @@ func TestBuildPresetArgsZeroBitrate(t *testing.T) {
 		Codec:   CodecHEVC,
 	}
 
-	inputArgs, outputArgs := BuildPresetArgs(presetVT, 0)
+	inputArgs, outputArgs := BuildPresetArgs(presetVT, 0, 0, 0)
 
 	// Should still have hwaccel input args
 	if len(inputArgs) == 0 {

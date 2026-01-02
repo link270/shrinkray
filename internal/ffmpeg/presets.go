@@ -133,10 +133,27 @@ var BasePresets = []struct {
 	{"720p", "Downscale to 720p", "Downscale to 720p (big savings)", CodecHEVC, 720},
 }
 
+// crfToBitrateModifier converts a CRF value to a VideoToolbox bitrate modifier.
+// This allows users to set CRF (like Handbrake) even when using VideoToolbox.
+// Formula: modifier = 0.8 - (crf * 0.02)
+// CRF 15 → 0.50, CRF 22 → 0.36, CRF 26 → 0.28, CRF 35 → 0.10
+func crfToBitrateModifier(crf int) float64 {
+	modifier := 0.8 - (float64(crf) * 0.02)
+	// Clamp to reasonable range
+	if modifier < 0.05 {
+		modifier = 0.05
+	}
+	if modifier > 0.80 {
+		modifier = 0.80
+	}
+	return modifier
+}
+
 // BuildPresetArgs builds FFmpeg arguments for a preset with the specified encoder
 // sourceBitrate is the source video bitrate in bits/second (used for dynamic bitrate calculation)
+// qualityHEVC/qualityAV1 are optional CRF overrides (0 = use default)
 // Returns (inputArgs, outputArgs) - inputArgs go before -i, outputArgs go after
-func BuildPresetArgs(preset *Preset, sourceBitrate int64) (inputArgs []string, outputArgs []string) {
+func BuildPresetArgs(preset *Preset, sourceBitrate int64, qualityHEVC, qualityAV1 int) (inputArgs []string, outputArgs []string) {
 	key := EncoderKey{preset.Encoder, preset.Codec}
 	config, ok := encoderConfigs[key]
 	if !ok {
@@ -171,14 +188,26 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64) (inputArgs []string, o
 	// Add encoder
 	outputArgs = append(outputArgs, "-c:v", config.encoder)
 
-	// Get quality setting
-	qualityStr := config.quality
+	// Determine quality value - use override if provided, otherwise use default
+	var qualityStr string
+	qualityOverride := 0
+	if preset.Codec == CodecHEVC && qualityHEVC > 0 {
+		qualityOverride = qualityHEVC
+	} else if preset.Codec == CodecAV1 && qualityAV1 > 0 {
+		qualityOverride = qualityAV1
+	}
 
-	// For encoders that use dynamic bitrate calculation
+	// For encoders that use dynamic bitrate calculation (VideoToolbox)
 	if config.usesBitrate && sourceBitrate > 0 {
-		// Parse modifier (e.g., "0.5" = 50% of source bitrate)
-		modifier := 0.5 // default
-		fmt.Sscanf(qualityStr, "%f", &modifier)
+		var modifier float64
+		if qualityOverride > 0 {
+			// Convert CRF override to bitrate modifier
+			modifier = crfToBitrateModifier(qualityOverride)
+		} else {
+			// Parse default modifier from config (e.g., "0.35")
+			modifier = 0.5
+			fmt.Sscanf(config.quality, "%f", &modifier)
+		}
 
 		// Calculate target bitrate in kbps
 		targetKbps := int64(float64(sourceBitrate) * modifier / 1000)
@@ -192,6 +221,12 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64) (inputArgs []string, o
 		}
 
 		qualityStr = fmt.Sprintf("%dk", targetKbps)
+	} else if qualityOverride > 0 {
+		// Use override quality directly (for CRF/CQ/QP based encoders)
+		qualityStr = fmt.Sprintf("%d", qualityOverride)
+	} else {
+		// Use default from config
+		qualityStr = config.quality
 	}
 
 	outputArgs = append(outputArgs, config.qualityFlag, qualityStr)

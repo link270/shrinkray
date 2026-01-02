@@ -39,6 +39,12 @@ type Config struct {
 
 	// NotifyOnComplete triggers a Pushover notification when all jobs finish
 	NotifyOnComplete bool `yaml:"notify_on_complete"`
+
+	// QualityHEVC is the CRF value for HEVC encoding (lower = higher quality, default 26)
+	QualityHEVC int `yaml:"quality_hevc"`
+
+	// QualityAV1 is the CRF value for AV1 encoding (lower = higher quality, default 35)
+	QualityAV1 int `yaml:"quality_av1"`
 }
 
 // DefaultConfig returns a config with sensible defaults
@@ -51,6 +57,8 @@ func DefaultConfig() *Config {
 		FFmpegPath:       "ffmpeg",
 		FFprobePath:      "ffprobe",
 		QueueFile:        "",
+		QualityHEVC:      26,
+		QualityAV1:       35,
 	}
 }
 
@@ -80,6 +88,12 @@ func Load(path string) (*Config, error) {
 	}
 	if cfg.Workers < 1 {
 		cfg.Workers = 1
+	}
+	if cfg.QualityHEVC == 0 {
+		cfg.QualityHEVC = 26
+	}
+	if cfg.QualityAV1 == 0 {
+		cfg.QualityAV1 = 35
 	}
 
 	return cfg, nil
