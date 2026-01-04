@@ -1,4 +1,4 @@
-media_path: ./media
+media_path: ./testdata
 temp_path: ""
 original_handling: keep
 workers: 3

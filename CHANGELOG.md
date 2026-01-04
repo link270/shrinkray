@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.1] - 2026-01-04
+
+### Fixed
+- Quality slider labels were backwards - now correctly show "Higher quality" on left and "Smaller file" on right (#24)
+
 ## [1.3.0] - 2026-01-01
 
 ### Added

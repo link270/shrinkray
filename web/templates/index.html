@@ -1448,12 +1448,12 @@
                             </div>
                             <div class="setting-control">
                                 <div class="quality-slider-container">
-                                    <span class="quality-label">Smaller</span>
+                                    <span class="quality-label">Higher quality</span>
                                     <input type="range" class="quality-slider" id="setting-quality-hevc"
                                            min="15" max="40" value="26"
                                            oninput="syncQualityInput('hevc', this.value)"
                                            onchange="updateSetting('quality_hevc', parseInt(this.value))">
-                                    <span class="quality-label">Higher quality</span>
+                                    <span class="quality-label">Smaller file</span>
                                     <input type="number" class="quality-input" id="setting-quality-hevc-input"
                                            min="15" max="40" value="26"
                                            onchange="syncQualitySlider('hevc', this.value); updateSetting('quality_hevc', parseInt(document.getElementById('setting-quality-hevc').value))">
@@ -1467,12 +1467,12 @@
                             </div>
                             <div class="setting-control">
                                 <div class="quality-slider-container">
-                                    <span class="quality-label">Smaller</span>
+                                    <span class="quality-label">Higher quality</span>
                                     <input type="range" class="quality-slider" id="setting-quality-av1"
                                            min="20" max="50" value="35"
                                            oninput="syncQualityInput('av1', this.value)"
                                            onchange="updateSetting('quality_av1', parseInt(this.value))">
-                                    <span class="quality-label">Higher quality</span>
+                                    <span class="quality-label">Smaller file</span>
                                     <input type="number" class="quality-input" id="setting-quality-av1-input"
                                            min="20" max="50" value="35"
                                            onchange="syncQualitySlider('av1', this.value); updateSetting('quality_av1', parseInt(document.getElementById('setting-quality-av1').value))">
