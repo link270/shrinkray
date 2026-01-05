@@ -226,17 +226,10 @@ func testEncoder(ffmpegPath string, encoder string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Build base args
-	args := []string{
-		"-f", "lavfi",
-		"-i", "color=c=black:s=256x256:d=0.1",
-		"-frames:v", "1",
-		"-c:v", encoder,
-		"-f", "null",
-		"-",
-	}
+	var args []string
 
-	// For VAAPI encoders, we need to specify the device
+	// For VAAPI encoders, we need to specify the device AND upload frames to hardware
+	// VAAPI (especially AMD) strictly requires frames in hardware format
 	if strings.Contains(encoder, "vaapi") {
 		device := detectVAAPIDevice()
 		if device == "" {
@@ -244,8 +237,27 @@ func testEncoder(ffmpegPath string, encoder string) bool {
 		}
 		// Store the detected device for later use
 		availableEncoders.vaapiDevice = device
-		// Prepend VAAPI device args
-		args = append([]string{"-vaapi_device", device}, args...)
+		// Build VAAPI-specific args with hwupload filter
+		args = []string{
+			"-vaapi_device", device,
+			"-f", "lavfi",
+			"-i", "color=c=black:s=256x256:d=0.1",
+			"-vf", "format=nv12,hwupload",
+			"-frames:v", "1",
+			"-c:v", encoder,
+			"-f", "null",
+			"-",
+		}
+	} else {
+		// Non-VAAPI encoders can accept software frames directly
+		args = []string{
+			"-f", "lavfi",
+			"-i", "color=c=black:s=256x256:d=0.1",
+			"-frames:v", "1",
+			"-c:v", encoder,
+			"-f", "null",
+			"-",
+		}
 	}
 
 	// Try to encode a single frame from a test pattern
