@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.3.3] - 2026-01-05
+
+### Fixed
+- Auto-create config file on first run with correct absolute paths
+- Default `queue_file` now uses absolute path `/config/queue.json` to prevent permission errors
+
 ## [1.3.2] - 2026-01-04
 
 ### Fixed

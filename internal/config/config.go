@@ -1,6 +1,7 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 
@@ -65,7 +66,7 @@ func DefaultConfig() *Config {
 		Workers:           1,
 		FFmpegPath:        "ffmpeg",
 		FFprobePath:       "ffprobe",
-		QueueFile:         "",
+		QueueFile:         "/config/queue.json",
 		QualityHEVC:       0, // 0 = use encoder-specific default
 		QualityAV1:        0, // 0 = use encoder-specific default
 		ScheduleEnabled:   false,
@@ -81,7 +82,10 @@ func Load(path string) (*Config, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// No config file - use defaults
+			// No config file - create one with defaults
+			if saveErr := cfg.Save(path); saveErr != nil {
+				fmt.Printf("Warning: Could not create config file: %v\n", saveErr)
+			}
 			return cfg, nil
 		}
 		return nil, err
