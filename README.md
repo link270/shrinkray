@@ -1,7 +1,7 @@
 <div align="center">
   <img src="web/templates/logo.png" alt="Shrinkray" width="128" height="128">
   <h1>Shrinkray</h1>
-  <p><strong>Intentional video transcoding for Unraid</strong></p>
+  <p><strong>Simple video transcoding for Unraid</strong></p>
   <p>Select a folder. Pick a preset. Shrink your media library.</p>
 
   ![Version](https://img.shields.io/github/v/release/gwlsn/shrinkray?style=flat-square&label=version)
