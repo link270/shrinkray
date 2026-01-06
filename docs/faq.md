@@ -28,7 +28,7 @@ Yes. All audio streams are copied to the output file unchanged (`-c:a copy`). If
 
 ### What about HDR content?
 
-Hardware encoders generally preserve HDR metadata and 10-bit color depth. Software encoders may require additional configuration for HDR preservation.
+Hardware encoders preserve HDR metadata and 10-bit color depth when your GPU supports the source format. If your GPU can't decode a particular format and falls back to software decoding, 10-bit HDR may be converted to 8-bit SDR. This is a hardware limitation, not a Shrinkray limitation.
 
 ### How does Shrinkray compare to Tdarr/Unmanic?
 
