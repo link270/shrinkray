@@ -4,7 +4,7 @@
   <p><strong>Intentional video transcoding for Unraid</strong></p>
   <p>Select a folder. Pick a preset. Shrink your media library.</p>
 
-  ![Version](https://img.shields.io/badge/version-1.3.2-blue?style=flat-square)
+  ![Version](https://img.shields.io/badge/version-1.3.7-blue?style=flat-square)
   ![Go](https://img.shields.io/badge/go-1.22+-00ADD8?style=flat-square&logo=go)
   ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
   ![Docker](https://img.shields.io/badge/docker-ghcr.io-2496ED?style=flat-square&logo=docker)
