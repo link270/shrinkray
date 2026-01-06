@@ -95,9 +95,6 @@ func main() {
 	fmt.Println("║          Simple, efficient video transcoding              ║")
 	fmt.Println("╚═══════════════════════════════════════════════════════════╝")
 	fmt.Println()
-
-	logger.Info("Starting Shrinkray", "log_level", cfg.LogLevel)
-
 	fmt.Printf("  Media path:   %s\n", cfg.MediaPath)
 	fmt.Printf("  Config:       %s\n", cfgPath)
 	fmt.Printf("  Queue file:   %s\n", cfg.QueueFile)
@@ -130,10 +127,8 @@ func main() {
 				marker = "* "
 			}
 			fmt.Printf("    %s%s (%s)\n", marker, enc.Name, enc.Encoder)
-			logger.Debug("Encoder available", "name", enc.Name, "encoder", enc.Encoder)
 		}
 	}
-	logger.Info("Selected encoder", "encoder", best.Name, "type", best.Accel)
 	fmt.Println()
 
 	// Initialize components
@@ -154,14 +149,17 @@ func main() {
 
 	// Start worker pool
 	workerPool.Start()
-	logger.Info("Worker pool started", "workers", cfg.Workers)
 
 	fmt.Printf("  Starting server on port %d\n", *port)
 	fmt.Println()
 	fmt.Println("  Press Ctrl+C to stop")
 	fmt.Println()
 
-	logger.Info("Server starting", "port", *port)
+	// Print logging separator and consolidated startup log
+	fmt.Println("─────────────────────────────────────────────────────────────")
+	fmt.Printf("  Logging started (level: %s)\n", cfg.LogLevel)
+	fmt.Println("─────────────────────────────────────────────────────────────")
+	logger.Info("Shrinkray started", "encoder", best.Name, "workers", cfg.Workers, "port", *port)
 
 	// Set up graceful shutdown
 	server := &http.Server{
