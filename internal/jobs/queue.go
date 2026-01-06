@@ -268,8 +268,8 @@ func (q *Queue) GetAll() []*Job {
 
 // GetNext returns the next pending job (for workers to pick up)
 func (q *Queue) GetNext() *Job {
-	q.mu.Lock()
-	defer q.mu.Unlock()
+	q.mu.RLock()
+	defer q.mu.RUnlock()
 
 	for _, id := range q.order {
 		if job, ok := q.jobs[id]; ok && job.Status == StatusPending {

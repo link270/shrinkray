@@ -286,7 +286,6 @@ func (w *Worker) isScheduleAllowed() bool {
 // processJob handles a single transcoding job
 func (w *Worker) processJob(job *Job) {
 	startTime := time.Now()
-	logger.Info("Job started", "job_id", job.ID, "file", job.InputPath, "preset", job.PresetID)
 
 	// Create a cancellable context for this job
 	jobCtx, jobCancel := context.WithCancel(w.ctx)
@@ -316,11 +315,13 @@ func (w *Worker) processJob(job *Job) {
 	tempDir := w.cfg.GetTempDir(job.InputPath)
 	tempPath := ffmpeg.BuildTempPath(job.InputPath, tempDir)
 
-	// Mark job as started
+	// Mark job as started (first worker to call this wins)
 	if err := w.queue.StartJob(job.ID, tempPath); err != nil {
-		// Job might have been cancelled or already started
+		// Another worker claimed this job, or it was cancelled
 		return
 	}
+
+	logger.Info("Job started", "job_id", job.ID, "file", job.InputPath, "preset", job.PresetID)
 
 	// Create progress channel
 	progressCh := make(chan ffmpeg.Progress, 10)
