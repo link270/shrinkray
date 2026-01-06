@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.1] - 2026-01-06
+
+### Fixed
+- QSV (Intel Quick Sync) encoding now works when hardware decode falls back to software (#21)
+- VAAPI encoding more reliable with mixed hardware/software decode scenarios (#21)
+
 ## [1.4.0] - 2026-01-06
 
 ### Added
