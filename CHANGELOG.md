@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.0] - 2026-01-06
+
+### Added
+- Structured logging system with configurable log levels (debug, info, warn, error)
+- `log_level` config option to control logging verbosity
+- Job lifecycle logging (started, completed, failed, cancelled)
+- FFmpeg command logging at debug level for troubleshooting
+- FFmpeg stderr capture for better error diagnostics
+
+### Fixed
+- Duplicate "Job started" log entries when running multiple workers
+
 ## [1.3.7] - 2026-01-06
 
 ### Fixed
