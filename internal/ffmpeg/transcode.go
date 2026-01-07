@@ -131,8 +131,11 @@ func (t *Transcoder) Transcode(
 				case "total_size":
 					currentProgress.Size, _ = strconv.ParseInt(value, 10, 64)
 				case "out_time_us":
-					us, _ := strconv.ParseInt(value, 10, 64)
-					currentProgress.Time = time.Duration(us) * time.Microsecond
+					logger.Debug("FFmpeg raw out_time_us", "value", value)
+					if value != "N/A" {
+						us, _ := strconv.ParseInt(value, 10, 64)
+						currentProgress.Time = time.Duration(us) * time.Microsecond
+					}
 				case "bitrate":
 					// Format: "1234.5kbits/s" or "N/A"
 					if value != "N/A" {
@@ -141,6 +144,7 @@ func (t *Transcoder) Transcode(
 					}
 				case "speed":
 					// Format: "1.5x" or "N/A"
+					logger.Debug("FFmpeg raw speed", "value", value)
 					if value != "N/A" {
 						value = strings.TrimSuffix(value, "x")
 						currentProgress.Speed, _ = strconv.ParseFloat(value, 64)
