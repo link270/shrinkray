@@ -13,3 +13,4 @@ quality_av1: 0
 schedule_enabled: false
 schedule_start_hour: 22
 schedule_end_hour: 6
+log_level: info
