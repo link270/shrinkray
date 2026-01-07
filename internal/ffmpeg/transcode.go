@@ -162,6 +162,13 @@ func (t *Transcoder) Transcode(
 							}
 						}
 
+						// Log progress values for debugging
+						logger.Debug("FFmpeg progress",
+							"time_us", currentProgress.Time.Microseconds(),
+							"speed", currentProgress.Speed,
+							"percent", currentProgress.Percent,
+							"duration_ms", duration.Milliseconds())
+
 						// Send progress update (non-blocking)
 						select {
 						case progressCh <- currentProgress:
