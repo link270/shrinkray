@@ -336,7 +336,9 @@ func (w *Worker) processJob(job *Job) {
 
 	// Run the transcode
 	duration := time.Duration(job.Duration) * time.Millisecond
-	result, err := w.transcoder.Transcode(jobCtx, job.InputPath, tempPath, preset, duration, job.Bitrate, job.Width, job.Height, w.cfg.QualityHEVC, w.cfg.QualityAV1, progressCh)
+	// Calculate total frames for frame-based progress fallback (VAAPI reports N/A for time)
+	totalFrames := int64(float64(job.Duration) / 1000.0 * job.FrameRate)
+	result, err := w.transcoder.Transcode(jobCtx, job.InputPath, tempPath, preset, duration, job.Bitrate, job.Width, job.Height, w.cfg.QualityHEVC, w.cfg.QualityAV1, totalFrames, progressCh)
 
 	if err != nil {
 		// Check if it was cancelled

@@ -53,6 +53,7 @@ func NewTranscoder(ffmpegPath string) *Transcoder {
 // sourceBitrate is the source video bitrate in bits/second (for dynamic bitrate calculation)
 // sourceWidth/sourceHeight are source dimensions (for calculating scaled output)
 // qualityHEVC/qualityAV1 are CRF values to use (0 = use preset defaults)
+// totalFrames is the expected total frame count (for progress fallback when time-based stats unavailable)
 func (t *Transcoder) Transcode(
 	ctx context.Context,
 	inputPath string,
@@ -62,6 +63,7 @@ func (t *Transcoder) Transcode(
 	sourceBitrate int64,
 	sourceWidth, sourceHeight int,
 	qualityHEVC, qualityAV1 int,
+	totalFrames int64,
 	progressCh chan<- Progress,
 ) (*TranscodeResult, error) {
 	startTime := time.Now()
@@ -152,26 +154,31 @@ func (t *Transcoder) Transcode(
 				case "progress":
 					// "continue" or "end"
 					if value == "continue" || value == "end" {
-						// Calculate percent and ETA
-						if duration > 0 {
+						// Calculate percent - prefer time-based, fallback to frame-based
+						if currentProgress.Time > 0 && duration > 0 {
+							// Time-based progress (most accurate)
 							currentProgress.Percent = float64(currentProgress.Time) / float64(duration) * 100
-							if currentProgress.Percent > 100 {
-								currentProgress.Percent = 100
-							}
+						} else if currentProgress.Frame > 0 && totalFrames > 0 {
+							// Frame-based fallback (for VAAPI and other HW encoders that report N/A for time)
+							currentProgress.Percent = float64(currentProgress.Frame) / float64(totalFrames) * 100
+						}
 
-							// Calculate ETA based on speed
-							if currentProgress.Speed > 0 {
-								remaining := duration - currentProgress.Time
-								currentProgress.ETA = time.Duration(float64(remaining) / currentProgress.Speed)
-							}
+						if currentProgress.Percent > 100 {
+							currentProgress.Percent = 100
+						}
+
+						// Calculate ETA based on speed (only available with time-based progress)
+						if currentProgress.Speed > 0 && duration > 0 {
+							remaining := duration - currentProgress.Time
+							currentProgress.ETA = time.Duration(float64(remaining) / currentProgress.Speed)
 						}
 
 						// Log progress values for debugging
 						logger.Debug("FFmpeg progress",
+							"frame", currentProgress.Frame,
 							"time_us", currentProgress.Time.Microseconds(),
 							"speed", currentProgress.Speed,
-							"percent", currentProgress.Percent,
-							"duration_ms", duration.Milliseconds())
+							"percent", currentProgress.Percent)
 
 						// Send progress update (non-blocking)
 						select {

@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.4.5] - 2026-01-07
+
+### Fixed
+- Progress bar now works during VAAPI hardware encodes (#29)
+  - FFmpeg reports `N/A` for time-based stats with some hardware encoders
+  - Added frame-based progress calculation as fallback when time is unavailable
+
 ## [1.4.4] - 2026-01-07
 
 ### Added

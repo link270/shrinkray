@@ -36,6 +36,7 @@ type Job struct {
 	Bitrate     int64     `json:"bitrate,omitempty"`      // Source video bitrate in bits/s
 	Width       int       `json:"width,omitempty"`        // Source video width
 	Height      int       `json:"height,omitempty"`       // Source video height
+	FrameRate   float64   `json:"frame_rate,omitempty"`   // Source video frame rate
 	TranscodeTime int64   `json:"transcode_secs,omitempty"` // Time to transcode in seconds
 	CreatedAt   time.Time `json:"created_at"`
 	StartedAt   time.Time `json:"started_at,omitempty"`
