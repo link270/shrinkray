@@ -66,9 +66,8 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		qualityFlag: "-global_quality",
 		quality:     "27",
 		extraArgs:   []string{"-preset", "medium"},
-		hwaccelArgs: []string{"-init_hw_device", "qsv=hw", "-filter_hw_device", "hw", "-hwaccel", "qsv", "-hwaccel_output_format", "qsv"},
-		scaleFilter: "scale_qsv",
-		baseFilter:  "format=nv12|qsv,hwupload=extra_hw_frames=64", // Handle software decode fallback
+		hwaccelArgs: []string{"-hwaccel", "qsv", "-hwaccel_output_format", "qsv"},
+		scaleFilter: "vpp_qsv", // vpp_qsv handles both hw and sw decoded frames
 	},
 	{HWAccelVAAPI, CodecHEVC}: {
 		encoder:     "hevc_vaapi",
@@ -112,9 +111,8 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		qualityFlag: "-global_quality",
 		quality:     "32",
 		extraArgs:   []string{"-preset", "medium"},
-		hwaccelArgs: []string{"-init_hw_device", "qsv=hw", "-filter_hw_device", "hw", "-hwaccel", "qsv", "-hwaccel_output_format", "qsv"},
-		scaleFilter: "scale_qsv",
-		baseFilter:  "format=nv12|qsv,hwupload=extra_hw_frames=64", // Handle software decode fallback
+		hwaccelArgs: []string{"-hwaccel", "qsv", "-hwaccel_output_format", "qsv"},
+		scaleFilter: "vpp_qsv", // vpp_qsv handles both hw and sw decoded frames
 	},
 	{HWAccelVAAPI, CodecAV1}: {
 		encoder:     "av1_vaapi",
@@ -175,9 +173,10 @@ func crfToBitrateModifier(crf int) float64 {
 
 // BuildPresetArgs builds FFmpeg arguments for a preset with the specified encoder
 // sourceBitrate is the source video bitrate in bits/second (used for dynamic bitrate calculation)
+// sourceWidth/sourceHeight are the source video dimensions (for calculating scaled output)
 // qualityHEVC/qualityAV1 are optional CRF overrides (0 = use default)
 // Returns (inputArgs, outputArgs) - inputArgs go before -i, outputArgs go after
-func BuildPresetArgs(preset *Preset, sourceBitrate int64, qualityHEVC, qualityAV1 int) (inputArgs []string, outputArgs []string) {
+func BuildPresetArgs(preset *Preset, sourceBitrate int64, sourceWidth, sourceHeight int, qualityHEVC, qualityAV1 int) (inputArgs []string, outputArgs []string) {
 	key := EncoderKey{preset.Encoder, preset.Codec}
 	config, ok := encoderConfigs[key]
 	if !ok {
@@ -206,12 +205,26 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, qualityHEVC, qualityAV
 	}
 
 	// Add scaling filter if needed
-	if preset.MaxHeight > 0 {
+	if preset.MaxHeight > 0 && sourceHeight > preset.MaxHeight {
 		scaleFilter := config.scaleFilter
 		if scaleFilter == "" {
 			scaleFilter = "scale"
 		}
-		filterParts = append(filterParts, fmt.Sprintf("%s=-2:'min(ih,%d)'", scaleFilter, preset.MaxHeight))
+
+		// vpp_qsv requires explicit dimensions (doesn't support -2 for auto aspect ratio)
+		if scaleFilter == "vpp_qsv" {
+			// Calculate output dimensions maintaining aspect ratio
+			targetHeight := preset.MaxHeight
+			targetWidth := sourceWidth * targetHeight / sourceHeight
+			// Ensure width is even (required for video encoding)
+			if targetWidth%2 != 0 {
+				targetWidth++
+			}
+			filterParts = append(filterParts, fmt.Sprintf("vpp_qsv=w=%d:h=%d", targetWidth, targetHeight))
+		} else {
+			// Other scalers support -2 for auto aspect ratio
+			filterParts = append(filterParts, fmt.Sprintf("%s=-2:'min(ih,%d)'", scaleFilter, preset.MaxHeight))
+		}
 	}
 
 	// Apply filter chain if we have any filters

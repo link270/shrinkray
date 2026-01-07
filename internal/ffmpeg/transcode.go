@@ -51,6 +51,7 @@ func NewTranscoder(ffmpegPath string) *Transcoder {
 // Transcode transcodes a video file using the given preset
 // It sends progress updates to the progress channel and returns the result
 // sourceBitrate is the source video bitrate in bits/second (for dynamic bitrate calculation)
+// sourceWidth/sourceHeight are source dimensions (for calculating scaled output)
 // qualityHEVC/qualityAV1 are CRF values to use (0 = use preset defaults)
 func (t *Transcoder) Transcode(
 	ctx context.Context,
@@ -59,6 +60,7 @@ func (t *Transcoder) Transcode(
 	preset *Preset,
 	duration time.Duration,
 	sourceBitrate int64,
+	sourceWidth, sourceHeight int,
 	qualityHEVC, qualityAV1 int,
 	progressCh chan<- Progress,
 ) (*TranscodeResult, error) {
@@ -73,7 +75,7 @@ func (t *Transcoder) Transcode(
 
 	// Build preset args with source bitrate for dynamic calculation
 	// inputArgs go before -i (hwaccel), outputArgs go after
-	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, qualityHEVC, qualityAV1)
+	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, sourceWidth, sourceHeight, qualityHEVC, qualityAV1)
 
 	// Build ffmpeg command
 	// Structure: ffmpeg [inputArgs] -i input [outputArgs] output

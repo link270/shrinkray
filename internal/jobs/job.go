@@ -34,6 +34,8 @@ type Job struct {
 	SpaceSaved  int64     `json:"space_saved,omitempty"`  // InputSize - OutputSize
 	Duration    int64     `json:"duration_ms,omitempty"`  // Video duration in ms
 	Bitrate     int64     `json:"bitrate,omitempty"`      // Source video bitrate in bits/s
+	Width       int       `json:"width,omitempty"`        // Source video width
+	Height      int       `json:"height,omitempty"`       // Source video height
 	TranscodeTime int64   `json:"transcode_secs,omitempty"` // Time to transcode in seconds
 	CreatedAt   time.Time `json:"created_at"`
 	StartedAt   time.Time `json:"started_at,omitempty"`
