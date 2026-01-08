@@ -8,7 +8,11 @@ This is normal. Your GPU handles video encoding and decoding (when it supports t
 - Audio/subtitle stream copying
 - FFmpeg process overhead
 
-If you see higher CPU usage, your GPU may not support the source codec and Shrinkray has automatically fallen back to software decoding. The GPU still handles encoding—only decoding moves to CPU. This happens automatically and transparently.
+If you see higher CPU usage, your GPU may not support the source codec and Shrinkray has automatically fallen back to software decoding. The GPU still handles encoding, only decoding moves to CPU. This happens automatically and transparently.
+
+### How can I tell if I'm using my GPU for transcoding?
+
+Open logs for Shrinkray, all the detected encoders are shown and the currently selected encoders have an asterisk. A "HW" or "SW" badge will appear on jobs in your queue to let you know if they are being software or hardware transcoded.
 
 ### Why does my AMD GPU show 0% usage during hardware encoding?
 
@@ -53,3 +57,4 @@ Shrinkray is intentionally simple, it's not designed for custom FFmpeg workflows
 ### Can Shrinkray transcode audio?
 
 No. Audio streams are copied unchanged (`-c:a copy`) to preserve quality and compatibility.
+
