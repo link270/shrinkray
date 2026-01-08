@@ -60,6 +60,7 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		extraArgs:   []string{"-preset", "p4", "-tune", "hq", "-rc", "vbr"},
 		hwaccelArgs: []string{"-hwaccel", "cuda", "-hwaccel_output_format", "cuda"},
 		scaleFilter: "scale_cuda",
+		// No baseFilter needed - NVENC auto-handles CPU frames from sw decode fallback
 	},
 	{HWAccelQSV, CodecHEVC}: {
 		encoder:     "hevc_qsv",
@@ -106,6 +107,7 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		extraArgs:   []string{"-preset", "p4", "-tune", "hq", "-rc", "vbr"},
 		hwaccelArgs: []string{"-hwaccel", "cuda", "-hwaccel_output_format", "cuda"},
 		scaleFilter: "scale_cuda",
+		// No baseFilter needed - NVENC auto-handles CPU frames from sw decode fallback
 	},
 	{HWAccelQSV, CodecAV1}: {
 		encoder:     "av1_qsv",
