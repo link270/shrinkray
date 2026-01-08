@@ -19,7 +19,7 @@ Shrinkray is a user-friendly video transcoding tool designed for Unraid to be si
 ### Features
 
 - **4 Smart Presets** — HEVC compress, AV1 compress, 1080p downscale, 720p downscale
-- **Full GPU Pipeline** — Hardware decoding AND encoding (frames stay on GPU)
+- **Full GPU Pipeline** — Hardware decoding AND encoding with software fallback
 - **Batch Selection** — Select entire folders to transcode whole seasons or libraries at once
 - **Scheduling** — Restrict transcoding to specific hours (e.g., overnight only)
 - **Quality Control** — Adjustable CRF for fine-tuned compression
