@@ -12,7 +12,20 @@ If you see higher CPU usage, your GPU may not support the source codec and Shrin
 
 ### How can I tell if I'm using my GPU for transcoding?
 
-Open logs for Shrinkray, all the detected encoders are shown and the currently selected encoders have an asterisk. A "HW" or "SW" badge will appear on jobs in your queue to let you know if they are being software or hardware transcoded.
+Check the Shrinkray logs at startup to see which encoders were detected—the active encoder is marked with an asterisk. Each job in your queue displays an "HW" or "SW" badge indicating hardware or software encoding.
+
+### What hardware supports AV1 encoding?
+
+AV1 hardware encoding requires newer GPUs:
+
+| Platform | Minimum Hardware |
+|----------|------------------|
+| **NVIDIA** | RTX 40 series (Ada Lovelace) |
+| **Intel** | Arc GPUs, Intel Gen 14+ iGPUs |
+| **Apple** | M3 chip or newer |
+| **AMD** | RX 7000 series (RDNA 3) |
+
+Older hardware will fall back to software encoding for AV1, which is significantly slower.
 
 ### Intel Quick Sync (QSV) not working on non-Unraid systems?
 

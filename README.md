@@ -118,21 +118,9 @@ Shrinkray automatically detects and uses the best available hardware encoder. No
 **Intel / AMD:**
 1. Add to container Extra Parameters: `--device /dev/dri:/dev/dri`
 
-### AV1 Hardware Requirements
-
-AV1 hardware encoding requires newer GPUs:
-
-| Platform | Minimum Hardware |
-|----------|------------------|
-| **NVIDIA** | RTX 40 series (Ada Lovelace) |
-| **Intel** | Arc GPUs, Intel Gen 14+ iGPUs |
-| **Apple** | M3 chip or newer |
-| **AMD** | RX 7000 series (RDNA 3) |
-
 ### Verifying Detection
 
-Open logs for Shrinkray, all the detected encoders are shown and the currently selected encoders have an asterisk.
-A "HW" or "SW" badge will appear on jobs in your queue to let you know if they are being software or hardware transcoded.
+Check the Shrinkray logs at startup to see which encoders were detected. The active encoder is marked with an asterisk. Each job in your queue displays an "HW" or "SW" badge indicating hardware or software encoding.
 
 ---
 
