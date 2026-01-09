@@ -97,9 +97,8 @@ func main() {
 	defer jobStore.Close()
 
 	fmt.Println("╔═══════════════════════════════════════════════════════════╗")
-	fmt.Println("║                        SHRINKRAY                          ║")
-	fmt.Println("║         Simple, user-friendly video transcoding           ║")
- fmt.Println("║                  for your media library                   ║")
+	fmt.Println("║                      🔬 SHRINKRAY                         ║")
+	fmt.Println("║          Simple, efficient video transcoding              ║")
 	fmt.Println("╚═══════════════════════════════════════════════════════════╝")
 	fmt.Println()
 	fmt.Printf("  Media path:   %s\n", cfg.MediaPath)
