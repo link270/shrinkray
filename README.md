@@ -107,7 +107,7 @@ Shrinkray automatically detects and uses the best available hardware encoder. No
 | **NVIDIA (NVENC)** | GTX 1050+ / RTX series | `--runtime=nvidia --gpus all` |
 | **Intel (Quick Sync)** | 6th gen+ CPU or Arc GPU | `--device /dev/dri:/dev/dri` |
 | **AMD (VAAPI)** | Polaris+ GPU on Linux | `--device /dev/dri:/dev/dri` |
-| **Apple (VideoToolbox)** | Any Mac (M1+ or Intel) | Native (no Docker needed) |
+| **Apple (VideoToolbox)** | Any Mac (M1+) | Native (no Docker needed) |
 
 ### Unraid GPU Passthrough
 
