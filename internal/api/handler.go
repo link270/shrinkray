@@ -160,6 +160,9 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 		"message": fmt.Sprintf("Processing %d paths in background...", len(req.Paths)),
 	})
 
+	// Auto-unpause when adding new jobs (prevents accidental blocking)
+	h.workerPool.Unpause()
+
 	// Process in background goroutine
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
@@ -257,6 +260,25 @@ func (h *Handler) ClearQueue(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"cleared": count,
 		"message": fmt.Sprintf("Cleared %d jobs", count),
+	})
+}
+
+// PauseQueue handles POST /api/queue/pause
+// Stops all running jobs and prevents new jobs from starting
+func (h *Handler) PauseQueue(w http.ResponseWriter, r *http.Request) {
+	count := h.workerPool.Pause()
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"paused":   true,
+		"requeued": count,
+	})
+}
+
+// ResumeQueue handles POST /api/queue/resume
+// Allows workers to pick up jobs again
+func (h *Handler) ResumeQueue(w http.ResponseWriter, r *http.Request) {
+	h.workerPool.Unpause()
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"paused": false,
 	})
 }
 

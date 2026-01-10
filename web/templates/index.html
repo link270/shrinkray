@@ -837,8 +837,24 @@
             background: var(--bg-tertiary);
             border-top: 1px solid var(--border);
             display: flex;
+            flex-direction: column;
             gap: 8px;
             flex-shrink: 0;
+        }
+
+        .queue-footer-buttons {
+            display: flex;
+            gap: 8px;
+        }
+
+        .queue-error:empty {
+            display: none;
+        }
+
+        .queue-error {
+            color: var(--error);
+            font-size: 0.75rem;
+            text-align: center;
         }
 
         .notify-label {
@@ -1447,7 +1463,11 @@
                         </div>
                     </div>
                     <div class="queue-footer">
-                        <button class="btn btn-secondary btn-sm" onclick="clearQueue()" style="flex: 1">Clear Queue</button>
+                        <div class="queue-footer-buttons">
+                            <button class="btn btn-secondary btn-sm" id="stop-resume-btn" onclick="toggleStopResume()" style="flex: 1">Stop All</button>
+                            <button class="btn btn-secondary btn-sm" onclick="clearQueue()" style="flex: 1">Clear Queue</button>
+                        </div>
+                        <div id="queue-error" class="queue-error"></div>
                     </div>
                 </div>
             </div>
@@ -2010,6 +2030,68 @@
             );
         }
 
+        // Stop/Resume Queue
+        let queuePaused = false;
+
+        function updateStopResumeButton() {
+            const btn = document.getElementById('stop-resume-btn');
+            if (!btn) return;
+            btn.textContent = queuePaused ? 'Resume' : 'Stop All';
+        }
+
+        function toggleStopResume() {
+            if (queuePaused) {
+                resumeQueue();
+            } else {
+                pauseQueue();
+            }
+        }
+
+        function pauseQueue() {
+            // Check if there are running jobs first
+            const hasRunningJobs = allSortedJobs.some(j => j.status === 'running');
+
+            if (!hasRunningJobs) {
+                showQueueError('No active jobs to stop');
+                return;
+            }
+
+            showConfirmModal(
+                'Stop Queue',
+                'This will stop all running jobs. They will return to the queue but must restart from the beginning.',
+                async () => {
+                    try {
+                        await fetch('/api/queue/pause', { method: 'POST' });
+                        queuePaused = true;
+                        updateStopResumeButton();
+                        refreshJobs();
+                    } catch (err) {
+                        console.error('Pause error:', err);
+                    }
+                }
+            );
+        }
+
+        async function resumeQueue() {
+            try {
+                await fetch('/api/queue/resume', { method: 'POST' });
+                queuePaused = false;
+                updateStopResumeButton();
+                refreshJobs();
+            } catch (err) {
+                console.error('Resume error:', err);
+            }
+        }
+
+        function showQueueError(message) {
+            const el = document.getElementById('queue-error');
+            if (!el) return;
+            el.textContent = message;
+            setTimeout(() => {
+                el.textContent = '';
+            }, 3000);
+        }
+
         // Confirm Modal
         let confirmCallback = null;
 
@@ -2127,6 +2209,9 @@
                         <div style="font-size: 0.8125rem; margin-top: 4px; color: var(--text-tertiary)">Select files and start transcoding</div>
                     </div>
                 `;
+                // No jobs, so not paused
+                queuePaused = false;
+                updateStopResumeButton();
                 return;
             }
 
@@ -2142,6 +2227,20 @@
             displayedJobCount = 0;
             container.innerHTML = '';
             loadMoreJobs();
+
+            // Sync Stop/Resume button state
+            const hasRunningJobs = jobs.some(j => j.status === 'running');
+            const hasPendingJobs = jobs.some(j => j.status === 'pending');
+
+            // If jobs are running, we're not paused
+            if (hasRunningJobs) {
+                queuePaused = false;
+            }
+            // If paused but no pending jobs, clear pause (nothing to resume)
+            if (queuePaused && !hasPendingJobs) {
+                queuePaused = false;
+            }
+            updateStopResumeButton();
         }
 
         function loadMoreJobs() {
