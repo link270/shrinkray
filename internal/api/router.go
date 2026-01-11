@@ -22,6 +22,10 @@ func registerAPIRoutes(mux *http.ServeMux, h *Handler) {
 	mux.HandleFunc("DELETE /api/jobs/{id}", h.CancelJob)
 	mux.HandleFunc("POST /api/jobs/{id}/retry", h.RetryJob)
 
+	// Queue control (stop/resume)
+	mux.HandleFunc("POST /api/queue/pause", h.PauseQueue)
+	mux.HandleFunc("POST /api/queue/resume", h.ResumeQueue)
+
 	// Configuration
 	mux.HandleFunc("GET /api/config", h.GetConfig)
 	mux.HandleFunc("PUT /api/config", h.UpdateConfig)

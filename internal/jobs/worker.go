@@ -21,6 +21,7 @@ type CacheInvalidator func(path string)
 // Worker processes transcoding jobs from the queue
 type Worker struct {
 	id              int
+	pool            *WorkerPool
 	queue           *Queue
 	transcoder      *ffmpeg.Transcoder
 	prober          *ffmpeg.Prober
@@ -35,6 +36,7 @@ type Worker struct {
 	currentJobMu sync.Mutex
 	currentJob   *Job
 	jobCancel    context.CancelFunc
+	jobDone      chan struct{} // Closed when current job finishes
 }
 
 // WorkerPool manages multiple workers
@@ -48,6 +50,10 @@ type WorkerPool struct {
 
 	ctx    context.Context
 	cancel context.CancelFunc
+
+	// Pause state - when true, workers won't pick up new jobs
+	paused   bool
+	pausedMu sync.RWMutex
 }
 
 // NewWorkerPool creates a new worker pool
@@ -76,6 +82,7 @@ func NewWorkerPool(queue *Queue, cfg *config.Config, invalidateCache CacheInvali
 func (p *WorkerPool) createWorker() *Worker {
 	worker := &Worker{
 		id:              p.nextWorkerID,
+		pool:            p,
 		queue:           p.queue,
 		transcoder:      ffmpeg.NewTranscoder(p.cfg.FFmpegPath),
 		prober:          ffmpeg.NewProber(p.cfg.FFprobePath),
@@ -118,7 +125,7 @@ func (p *WorkerPool) CancelJob(jobID string) bool {
 	p.mu.Unlock()
 
 	for _, w := range workers {
-		if w.CancelCurrentJob(jobID) {
+		if done := w.CancelCurrentJob(jobID); done != nil {
 			return true
 		}
 	}
@@ -223,6 +230,73 @@ func (p *WorkerPool) WorkerCount() int {
 	return len(p.workers)
 }
 
+// IsPaused returns whether job processing is paused
+func (p *WorkerPool) IsPaused() bool {
+	p.pausedMu.RLock()
+	defer p.pausedMu.RUnlock()
+	return p.paused
+}
+
+// Pause stops all running jobs and prevents new jobs from starting.
+// Returns the number of jobs that were requeued.
+func (p *WorkerPool) Pause() int {
+	p.pausedMu.Lock()
+	p.paused = true
+	p.pausedMu.Unlock()
+
+	// Collect all running jobs
+	p.mu.Lock()
+	type runningJob struct {
+		worker *Worker
+		jobID  string
+	}
+	var runningJobs []runningJob
+	for _, w := range p.workers {
+		w.currentJobMu.Lock()
+		if w.currentJob != nil {
+			runningJobs = append(runningJobs, runningJob{
+				worker: w,
+				jobID:  w.currentJob.ID,
+			})
+		}
+		w.currentJobMu.Unlock()
+	}
+	p.mu.Unlock()
+
+	// Sort running jobs by ID ascending (oldest first) so we can requeue in correct order
+	sort.Slice(runningJobs, func(i, j int) bool {
+		return runningJobs[i].jobID < runningJobs[j].jobID
+	})
+
+	// Requeue in REVERSE order (newest first) so oldest ends up at front of queue
+	// Requeue adds to front, so: requeue(3), requeue(2), requeue(1) → [1, 2, 3, ...]
+	count := 0
+	for i := len(runningJobs) - 1; i >= 0; i-- {
+		rj := runningJobs[i]
+		// Requeue FIRST while job is still "running" - this changes status to "pending"
+		if err := p.queue.Requeue(rj.jobID); err != nil {
+			logger.Warn("Failed to requeue job during pause", "job_id", rj.jobID, "error", err)
+			continue
+		}
+		count++
+
+		// Now cancel the job and wait for it to finish
+		done := rj.worker.CancelCurrentJob(rj.jobID)
+		if done != nil {
+			<-done
+		}
+	}
+
+	return count
+}
+
+// Unpause allows workers to pick up jobs again
+func (p *WorkerPool) Unpause() {
+	p.pausedMu.Lock()
+	p.paused = false
+	p.pausedMu.Unlock()
+}
+
 // Start starts the worker's processing loop
 func (w *Worker) Start(parentCtx context.Context) {
 	w.ctx, w.cancel = context.WithCancel(parentCtx)
@@ -246,6 +320,16 @@ func (w *Worker) run() {
 		case <-w.ctx.Done():
 			return
 		default:
+			// Check if paused (user clicked Stop)
+			if w.pool.IsPaused() {
+				select {
+				case <-w.ctx.Done():
+					return
+				case <-time.After(500 * time.Millisecond):
+					continue
+				}
+			}
+
 			// Check if schedule allows transcoding
 			if !w.isScheduleAllowed() {
 				select {
@@ -304,12 +388,17 @@ func (w *Worker) processJob(job *Job) {
 	w.currentJobMu.Lock()
 	w.currentJob = job
 	w.jobCancel = jobCancel
+	w.jobDone = make(chan struct{})
 	w.currentJobMu.Unlock()
 
 	defer func() {
 		w.currentJobMu.Lock()
 		w.currentJob = nil
 		w.jobCancel = nil
+		if w.jobDone != nil {
+			close(w.jobDone)
+			w.jobDone = nil
+		}
 		w.currentJobMu.Unlock()
 	}()
 
@@ -357,10 +446,11 @@ func (w *Worker) processJob(job *Job) {
 			// Only mark as cancelled if user-initiated (jobCtx cancelled but w.ctx still active)
 			// If w.ctx is also cancelled, this is a shutdown - leave job as "running"
 			// so it will be reset to pending on restart
-			if w.ctx.Err() != context.Canceled {
+			// Also skip if job was requeued by Pause() (status changed to pending)
+			if w.ctx.Err() != context.Canceled && job.Status == StatusRunning {
 				logger.Info("Job cancelled", "job_id", job.ID)
 				_ = w.queue.CancelJob(job.ID)
-			} else {
+			} else if w.ctx.Err() == context.Canceled {
 				logger.Info("Job interrupted by shutdown", "job_id", job.ID)
 			}
 			return
@@ -387,10 +477,11 @@ func (w *Worker) processJob(job *Job) {
 				if jobCtx.Err() == context.Canceled {
 					os.Remove(tempPath)
 					// Only mark as cancelled if user-initiated, not shutdown
-					if w.ctx.Err() != context.Canceled {
+					// Also skip if job was requeued by Pause() (status changed to pending)
+					if w.ctx.Err() != context.Canceled && job.Status == StatusRunning {
 						logger.Info("Job cancelled during software decode retry", "job_id", job.ID)
 						_ = w.queue.CancelJob(job.ID)
-					} else {
+					} else if w.ctx.Err() == context.Canceled {
 						logger.Info("Job interrupted by shutdown during retry", "job_id", job.ID)
 					}
 					return
@@ -453,16 +544,17 @@ func (w *Worker) processJob(job *Job) {
 	_ = w.queue.CompleteJob(job.ID, finalPath, result.OutputSize)
 }
 
-// CancelCurrentJob cancels the job if it matches the given ID
-func (w *Worker) CancelCurrentJob(jobID string) bool {
+// CancelCurrentJob cancels the job if it matches the given ID.
+// Returns a channel that will be closed when the job finishes, or nil if job not found.
+func (w *Worker) CancelCurrentJob(jobID string) <-chan struct{} {
 	w.currentJobMu.Lock()
 	defer w.currentJobMu.Unlock()
 
 	if w.currentJob != nil && w.currentJob.ID == jobID && w.jobCancel != nil {
 		w.jobCancel()
-		return true
+		return w.jobDone
 	}
-	return false
+	return nil
 }
 
 // CancelAndStop cancels any current job and stops the worker immediately
