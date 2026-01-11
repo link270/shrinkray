@@ -2299,6 +2299,10 @@
             if (queueFilter !== 'all' && updatedJob.status !== queueFilter) {
                 existingEl.remove();
                 displayedJobCount--;
+                // Show empty state if no more jobs visible
+                if (displayedJobCount === 0) {
+                    loadMoreJobs();
+                }
                 return;
             }
 
