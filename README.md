@@ -64,7 +64,6 @@ services:
     environment:
       - PUID=1000
       - PGID=1000
-      - TZ=America/New_York
     restart: unless-stopped
 ```
 
