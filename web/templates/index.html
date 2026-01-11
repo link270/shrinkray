@@ -2295,6 +2295,13 @@
             // If element not in DOM (beyond pagination), nothing to do
             if (!existingEl) return;
 
+            // If job no longer matches current filter, just remove it
+            if (queueFilter !== 'all' && updatedJob.status !== queueFilter) {
+                existingEl.remove();
+                displayedJobCount--;
+                return;
+            }
+
             // Create new element HTML
             const temp = document.createElement('div');
             temp.innerHTML = renderJobHTML(updatedJob);
