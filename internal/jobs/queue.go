@@ -448,9 +448,10 @@ func (q *Queue) Requeue(id string) error {
 	return nil
 }
 
-// Clear removes all non-running jobs from the queue (pending, completed, failed, cancelled)
-// Only running jobs are kept.
-func (q *Queue) Clear() int {
+// Clear removes jobs from the queue. If filterStatus is empty, clears all
+// non-running jobs. If specified, clears only jobs matching that status.
+// Running jobs are never cleared.
+func (q *Queue) Clear(filterStatus Status) int {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
@@ -461,14 +462,20 @@ func (q *Queue) Clear() int {
 		if !ok {
 			continue
 		}
+		// Never clear running jobs
 		if job.Status == StatusRunning {
-			// Keep only running jobs
 			newOrder = append(newOrder, id)
-		} else {
-			q.persistDelete(id)
-			delete(q.jobs, id)
-			count++
+			continue
 		}
+		// If filtering by status, only clear matching jobs
+		if filterStatus != "" && job.Status != filterStatus {
+			newOrder = append(newOrder, id)
+			continue
+		}
+		// Clear this job
+		q.persistDelete(id)
+		delete(q.jobs, id)
+		count++
 	}
 	q.order = newOrder
 

@@ -599,9 +599,14 @@
             border: 1px solid var(--border);
         }
 
-        .btn-secondary:hover {
+        .btn-secondary:hover:not(:disabled) {
             background: var(--bg-tertiary);
             border-color: var(--border-hover);
+        }
+
+        .btn-secondary:disabled {
+            opacity: 0.4;
+            cursor: default;
         }
 
         .btn-danger {
@@ -1495,7 +1500,7 @@
                     <div class="queue-footer">
                         <div class="queue-footer-buttons">
                             <button class="btn btn-secondary btn-sm" id="stop-resume-btn" onclick="toggleStopResume()" style="flex: 1">Stop All</button>
-                            <button class="btn btn-secondary btn-sm" onclick="clearQueue()" style="flex: 1">Clear Queue</button>
+                            <button class="btn btn-secondary btn-sm" id="clear-btn" onclick="clearQueue()" style="flex: 1">Clear</button>
                         </div>
                         <div id="queue-error" class="queue-error"></div>
                     </div>
@@ -2046,12 +2051,19 @@
         }
 
         function clearQueue() {
+            const message = queueFilter === 'all'
+                ? 'This will remove all non-active jobs from the queue (including pending jobs). Your active jobs will not be affected.'
+                : `This will remove all ${queueFilter} jobs from the queue.`;
+
             showConfirmModal(
-                'Clear Queue',
-                'This will remove all non-active jobs from the queue (including pending jobs). Your active jobs will not be affected.',
+                'Clear Jobs',
+                message,
                 async () => {
                     try {
-                        await fetch('/api/jobs/clear', { method: 'POST' });
+                        const url = queueFilter === 'all'
+                            ? '/api/jobs/clear'
+                            : `/api/jobs/clear?status=${queueFilter}`;
+                        await fetch(url, { method: 'POST' });
                         refreshJobs();
                     } catch (err) {
                         console.error('Clear error:', err);
@@ -2447,6 +2459,8 @@
             const container = document.getElementById('queue-list');
             container.innerHTML = '';
             loadMoreJobs();
+            // Disable Clear button for running filter (can't clear running jobs)
+            document.getElementById('clear-btn').disabled = filter === 'running';
         }
 
         function getFilteredJobs() {

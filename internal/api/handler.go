@@ -255,8 +255,12 @@ func (h *Handler) CancelJob(w http.ResponseWriter, r *http.Request) {
 }
 
 // ClearQueue handles POST /api/jobs/clear
+// Optional query param: ?status=pending|complete|failed|cancelled
+// If status is provided, only jobs matching that status are cleared.
+// Running jobs are never cleared.
 func (h *Handler) ClearQueue(w http.ResponseWriter, r *http.Request) {
-	count := h.queue.Clear()
+	status := jobs.Status(r.URL.Query().Get("status"))
+	count := h.queue.Clear(status)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
 		"cleared": count,
 		"message": fmt.Sprintf("Cleared %d jobs", count),
