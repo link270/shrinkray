@@ -2217,23 +2217,72 @@
         }
 
         function updateJobStatus(updatedJob) {
-            // Update in allSortedJobs
-            const idx = allSortedJobs.findIndex(j => j.id === updatedJob.id);
-            if (idx !== -1) {
-                allSortedJobs[idx] = updatedJob;
+            const statusOrder = { running: 0, pending: 1, failed: 2, complete: 3, cancelled: 4 };
+
+            // Find current index before update
+            const oldIdx = allSortedJobs.findIndex(j => j.id === updatedJob.id);
+
+            // Update or add job in array
+            if (oldIdx !== -1) {
+                allSortedJobs[oldIdx] = updatedJob;
             } else {
-                // Job not in our list yet, add it
                 allSortedJobs.push(updatedJob);
             }
 
-            // Find existing element
-            const el = document.querySelector(`.job-item[data-job-id="${updatedJob.id}"]`);
-            if (!el) return;
+            // Re-sort array
+            allSortedJobs.sort((a, b) => (statusOrder[a.status] ?? 5) - (statusOrder[b.status] ?? 5));
 
-            // Replace with new HTML (status changed, need new markup)
+            // Find new position after sort
+            const newIdx = allSortedJobs.findIndex(j => j.id === updatedJob.id);
+
+            // Find existing DOM element
+            const container = document.getElementById('queue-list');
+            const existingEl = container.querySelector(`.job-item[data-job-id="${updatedJob.id}"]`);
+
+            // If element not in DOM (beyond pagination), nothing to do
+            if (!existingEl) return;
+
+            // Create new element HTML
             const temp = document.createElement('div');
             temp.innerHTML = renderJobHTML(updatedJob);
-            el.replaceWith(temp.firstElementChild);
+            const newEl = temp.firstElementChild;
+
+            // If position unchanged, just replace content
+            if (oldIdx === newIdx) {
+                existingEl.replaceWith(newEl);
+                return;
+            }
+
+            // Position changed - remove old element
+            existingEl.remove();
+
+            // Check if new position is within displayed range
+            if (newIdx >= displayedJobCount) {
+                // Job moved beyond visible range, don't re-insert
+                displayedJobCount--;
+                return;
+            }
+
+            // Insert at new position
+            if (newIdx === 0) {
+                // Insert at beginning (before first .job-item, after any banners)
+                const firstJob = container.querySelector('.job-item');
+                if (firstJob) {
+                    firstJob.before(newEl);
+                } else {
+                    container.appendChild(newEl);
+                }
+            } else {
+                // Insert after previous job
+                const prevJob = allSortedJobs[newIdx - 1];
+                const prevEl = container.querySelector(`.job-item[data-job-id="${prevJob.id}"]`);
+                if (prevEl) {
+                    prevEl.after(newEl);
+                } else {
+                    // Previous job not rendered, append (edge case)
+                    container.appendChild(newEl);
+                }
+            }
         }
 
         function addJobToList(job) {
