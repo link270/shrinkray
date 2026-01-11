@@ -637,6 +637,28 @@
             height: 14px;
         }
 
+        /* Queue Filter */
+        .queue-filter {
+            padding: 4px 8px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 0.75rem;
+            font-family: var(--font-sans);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            cursor: pointer;
+            margin-left: auto;
+        }
+
+        .queue-filter:hover {
+            border-color: var(--border-hover);
+        }
+
+        .queue-filter:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
         /* Queue Panel */
         .queue-panel {
             width: 400px;
@@ -1440,6 +1462,14 @@
                             </svg>
                             Queue
                         </span>
+                        <select class="queue-filter" id="queue-filter" onchange="setQueueFilter(this.value)">
+                            <option value="all">All</option>
+                            <option value="running">Running</option>
+                            <option value="pending">Pending</option>
+                            <option value="failed">Failed</option>
+                            <option value="complete">Complete</option>
+                            <option value="cancelled">Cancelled</option>
+                        </select>
                         <label class="notify-label" id="notify-container" style="display: none">
                             <input type="checkbox" id="notify-checkbox" onchange="updateNotifySetting(this.checked)">
                             <span>Notify when done</span>
@@ -2359,6 +2389,20 @@
         const JOBS_PER_PAGE = 50;
         let allSortedJobs = [];
         let displayedJobCount = 0;
+        let queueFilter = 'all'; // 'all', 'running', 'pending', 'failed', 'complete', 'cancelled'
+
+        function setQueueFilter(filter) {
+            queueFilter = filter;
+            displayedJobCount = 0;
+            const container = document.getElementById('queue-list');
+            container.innerHTML = '';
+            loadMoreJobs();
+        }
+
+        function getFilteredJobs() {
+            if (queueFilter === 'all') return allSortedJobs;
+            return allSortedJobs.filter(j => j.status === queueFilter);
+        }
 
         function updateJobs(jobs) {
             const container = document.getElementById('queue-list');
@@ -2432,15 +2476,35 @@
         }
 
         function loadMoreJobs() {
-            if (displayedJobCount >= allSortedJobs.length) return;
-
+            const filteredJobs = getFilteredJobs();
             const container = document.getElementById('queue-list');
+
+            // Show empty state if no jobs match filter
+            if (filteredJobs.length === 0 && displayedJobCount === 0) {
+                const filterLabel = queueFilter === 'all' ? '' : queueFilter;
+                container.innerHTML = `
+                    <div class="queue-empty">
+                        <div class="queue-empty-icon">
+                            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.3">
+                                <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                <path d="M3 9h18"/>
+                                <path d="M9 21V9"/>
+                            </svg>
+                        </div>
+                        <div>No ${filterLabel} jobs</div>
+                    </div>
+                `;
+                return;
+            }
+
+            if (displayedJobCount >= filteredJobs.length) return;
+
             const fragment = document.createDocumentFragment();
             const temp = document.createElement('div');
 
-            const endIndex = Math.min(displayedJobCount + JOBS_PER_PAGE, allSortedJobs.length);
+            const endIndex = Math.min(displayedJobCount + JOBS_PER_PAGE, filteredJobs.length);
             for (let i = displayedJobCount; i < endIndex; i++) {
-                temp.innerHTML = renderJobHTML(allSortedJobs[i]);
+                temp.innerHTML = renderJobHTML(filteredJobs[i]);
                 fragment.appendChild(temp.firstElementChild);
             }
 
@@ -2452,8 +2516,8 @@
             displayedJobCount = endIndex;
 
             // Add "scroll for more" indicator if there are more jobs
-            if (displayedJobCount < allSortedJobs.length) {
-                const remaining = allSortedJobs.length - displayedJobCount;
+            if (displayedJobCount < filteredJobs.length) {
+                const remaining = filteredJobs.length - displayedJobCount;
                 const indicator = document.createElement('div');
                 indicator.className = 'load-more-indicator';
                 indicator.style.cssText = 'text-align: center; padding: 16px; color: var(--text-secondary); font-size: 0.875rem;';
@@ -2468,7 +2532,7 @@
             container.addEventListener('scroll', () => {
                 // Load more when scrolled near bottom (within 100px)
                 const nearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
-                if (nearBottom && displayedJobCount < allSortedJobs.length) {
+                if (nearBottom && displayedJobCount < getFilteredJobs().length) {
                     loadMoreJobs();
                 }
             });
