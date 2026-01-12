@@ -380,68 +380,30 @@ func TestRequiresSoftwareDecodeProactive(t *testing.T) {
 	}
 }
 
-// TestIsHWDecodeFailure_FrameCount verifies the frame count fallback logic
-func TestIsHWDecodeFailure_FrameCount(t *testing.T) {
+// TestShouldRetryWithSoftwareDecode verifies the retry decision logic
+func TestShouldRetryWithSoftwareDecode(t *testing.T) {
 	tests := []struct {
 		name     string
-		frames   int64
-		stderr   string
 		encoder  ffmpeg.HWAccel
 		expected bool
 	}{
-		// === Zero frames = definite decode failure ===
-		{"ZeroFrames_QSV", 0, "", ffmpeg.HWAccelQSV, true},
-		{"ZeroFrames_VAAPI", 0, "", ffmpeg.HWAccelVAAPI, true},
-		{"ZeroFrames_NVENC", 0, "", ffmpeg.HWAccelNVENC, true},
-		{"ZeroFrames_VideoToolbox", 0, "", ffmpeg.HWAccelVideoToolbox, true},
+		// Hardware encoders should trigger retry
+		{"QSV", ffmpeg.HWAccelQSV, true},
+		{"VAAPI", ffmpeg.HWAccelVAAPI, true},
+		{"NVENC", ffmpeg.HWAccelNVENC, true},
+		{"VideoToolbox", ffmpeg.HWAccelVideoToolbox, true},
 
-		// === Some frames processed = not a decode failure ===
-		{"SomeFrames_QSV", 100, "", ffmpeg.HWAccelQSV, false},
-		{"ManyFrames_VAAPI", 10000, "", ffmpeg.HWAccelVAAPI, false},
-		{"FewFrames_NVENC", 5, "", ffmpeg.HWAccelNVENC, false},
-
-		// === Critical patterns even with some frames processed ===
-		{"HWAccelInit_WithFrames", 50, "hwaccel initialisation returned error", ffmpeg.HWAccelQSV, true},
-		{"CUDASetup_WithFrames", 50, "Failed setup for format cuda", ffmpeg.HWAccelNVENC, true},
-		{"VAAPIContext_WithFrames", 50, "Failed to create VAAPI decode context", ffmpeg.HWAccelVAAPI, true},
-
-		// === Software encoder - No fallback possible ===
-		{"ZeroFrames_Software", 0, "", ffmpeg.HWAccelNone, false},
-		{"SomeFrames_Software", 100, "", ffmpeg.HWAccelNone, false},
-		{"WithPattern_Software", 0, "hwaccel initialisation returned error", ffmpeg.HWAccelNone, false},
-
-		// === Combined: zero frames + pattern ===
-		{"ZeroFrames_WithPattern", 0, "hwaccel initialisation returned error", ffmpeg.HWAccelQSV, true},
+		// Software encoder should NOT trigger retry (no hardware to fall back from)
+		{"Software", ffmpeg.HWAccelNone, false},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := &ffmpeg.TranscodeError{
-				Err:    fmt.Errorf("test error"),
-				Stderr: tt.stderr,
-				Frames: tt.frames,
-			}
-			result := isHWDecodeFailure(err, tt.encoder)
+			result := shouldRetryWithSoftwareDecode(tt.encoder)
 			if result != tt.expected {
-				t.Errorf("isHWDecodeFailure(frames=%d, stderr=%q, encoder=%v) = %v, want %v",
-					tt.frames, tt.stderr, tt.encoder, result, tt.expected)
+				t.Errorf("shouldRetryWithSoftwareDecode(%v) = %v, want %v",
+					tt.encoder, result, tt.expected)
 			}
 		})
-	}
-}
-
-// TestIsHWDecodeFailure_NonTranscodeError verifies non-TranscodeError handling
-func TestIsHWDecodeFailure_NonTranscodeError(t *testing.T) {
-	// Regular error (not TranscodeError) should return false
-	regularErr := fmt.Errorf("some other error")
-	result := isHWDecodeFailure(regularErr, ffmpeg.HWAccelQSV)
-	if result {
-		t.Error("expected false for non-TranscodeError, got true")
-	}
-
-	// nil error should return false
-	result = isHWDecodeFailure(nil, ffmpeg.HWAccelQSV)
-	if result {
-		t.Error("expected false for nil error, got true")
 	}
 }

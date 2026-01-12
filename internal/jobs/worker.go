@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 
@@ -469,10 +468,10 @@ func (w *Worker) processJob(job *Job) {
 			return
 		}
 
-		// Check if it's a hardware decode failure that should trigger software decode retry
-		// Skip if we already used software decode proactively
-		if !useSoftwareDecode && isHWDecodeFailure(err, preset.Encoder) {
-			logger.Info("Hardware decode failed, retrying with software decode", "job_id", job.ID)
+		// If using hardware encoder and it failed, retry with software decode
+		// Skip if we already used software decode
+		if !useSoftwareDecode && shouldRetryWithSoftwareDecode(preset.Encoder) {
+			logger.Info("Hardware transcode failed, retrying with software decode", "job_id", job.ID)
 
 			// Create new progress channel for retry
 			retryProgressCh := make(chan ffmpeg.Progress, 10)
@@ -509,8 +508,8 @@ func (w *Worker) processJob(job *Job) {
 			}
 
 			logger.Info("Software decode fallback succeeded", "job_id", job.ID)
-		} else if useSoftwareDecode || !isHWDecodeFailure(err, preset.Encoder) {
-			// Not a hardware decode failure, fail normally
+		} else {
+			// Already used software decode or not using hardware encoder, fail the job
 			os.Remove(tempPath)
 			logger.Error("Job failed", "job_id", job.ID, "error", err.Error())
 			_ = w.queue.FailJob(job.ID, err.Error())
@@ -584,42 +583,14 @@ func (w *Worker) CancelAndStop() {
 	w.Stop()
 }
 
-// isHWDecodeFailure checks if the error indicates a hardware decode failure
-// that should trigger a software decode retry.
+// shouldRetryWithSoftwareDecode returns true if we should retry with software decode.
+// Simple rule: if using a hardware encoder and the transcode failed, try software decode once.
+// This catches all hardware failures (initialization, mid-stream, EOF issues) without
+// fragile pattern matching on error messages.
 //
-// This is a fallback for cases not caught by proactive RequiresSoftwareDecode().
-// Primary detection is now via frame count: if 0 frames were processed, it's
-// almost certainly a decode failure (the encoder never received any frames).
-func isHWDecodeFailure(err error, encoder ffmpeg.HWAccel) bool {
-	transcodeErr, ok := err.(*ffmpeg.TranscodeError)
-	if !ok {
-		return false
-	}
-
+// Note: Jellyfin doesn't even have automatic retry (Issue #2314 was closed without implementation).
+// Our approach is more robust - we always try software decode fallback once.
+func shouldRetryWithSoftwareDecode(encoder ffmpeg.HWAccel) bool {
 	// Software encoder has no hardware decode to fall back from
-	if encoder == ffmpeg.HWAccelNone {
-		return false
-	}
-
-	// Primary check: if 0 frames were processed, it's almost certainly a decode failure
-	// (the encoder never received any frames to encode)
-	if transcodeErr.Frames == 0 {
-		return true
-	}
-
-	// Secondary check: a few critical patterns that can occur even if some frames processed
-	stderr := transcodeErr.Stderr
-	criticalPatterns := []string{
-		"hwaccel initialisation returned error",
-		"Failed setup for format cuda",
-		"Failed to create VAAPI decode context",
-	}
-
-	for _, pattern := range criticalPatterns {
-		if strings.Contains(stderr, pattern) {
-			return true
-		}
-	}
-
-	return false
+	return encoder != ffmpeg.HWAccelNone
 }
