@@ -302,21 +302,7 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, sourceWidth, sourceHei
 		if scaleFilter == "" {
 			scaleFilter = "scale"
 		}
-
-		// vpp_qsv requires explicit dimensions (doesn't support -2 for auto aspect ratio)
-		if scaleFilter == "vpp_qsv" {
-			// Calculate output dimensions maintaining aspect ratio
-			targetHeight := preset.MaxHeight
-			targetWidth := sourceWidth * targetHeight / sourceHeight
-			// Ensure width is even (required for video encoding)
-			if targetWidth%2 != 0 {
-				targetWidth++
-			}
-			filterParts = append(filterParts, fmt.Sprintf("vpp_qsv=w=%d:h=%d", targetWidth, targetHeight))
-		} else {
-			// Other scalers support -2 for auto aspect ratio
-			filterParts = append(filterParts, fmt.Sprintf("%s=-2:'min(ih,%d)'", scaleFilter, preset.MaxHeight))
-		}
+		filterParts = append(filterParts, fmt.Sprintf("%s=-2:'min(ih,%d)'", scaleFilter, preset.MaxHeight))
 	}
 
 	// Apply filter chain if we have any filters
