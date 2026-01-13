@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.3] - 2026-01-13
+
+### Fixed
+- **iOS Safari scrolling on iPad and iPhone** (#42)
+  - Clear Queue and Transcode buttons no longer get pushed off-screen on iPad with many queue items
+  - Fixed flex container chain with proper `min-height: 0` for scroll containment
+  - iPhone landscape now shows both file list and action buttons (preset/transcode)
+  - Uses `100dvh` for dynamic viewport height and `clamp()` for responsive list sizing
+
 ## [1.7.2] - 2026-01-13
 
 ### Fixed
