@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.2] - 2026-01-13
+
+### Fixed
+- **FFmpeg -38 error at 97% progress** (#56)
+  - H.264 10-bit content now automatically uses software decode (no GPU supports H.264 10-bit hardware decode)
+  - Proactive codec detection skips hardware decode for unsupported profiles: VC-1/WMV3, MPEG-4 ASP
+  - Adopted Jellyfin's battle-tested FFmpeg hardware acceleration pipeline
+  - Removed problematic `vpp_qsv` filter that caused EOF errors with software decode
+  - Hardware decode failures now automatically retry with software decode
+
+### Changed
+- QSV on Linux now derives from VAAPI for more reliable device initialization
+- Consolidated duplicate `copyFile` implementations into shared `util.CopyFile()`
+- Removed dead code (unreachable `vpp_qsv` scaling branch)
+
 ## [1.7.1] - 2026-01-11
 
 ### Fixed
