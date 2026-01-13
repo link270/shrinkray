@@ -139,8 +139,8 @@
 
         .stats-bar {
             display: flex;
-            gap: 24px;
-            margin-left: 40px;
+            gap: 16px;
+            margin-left: 20px;
         }
 
         .stat-item {
@@ -158,10 +158,108 @@
         .stat-label {
             font-size: 0.8125rem;
             color: var(--text-secondary);
+            white-space: nowrap;
         }
 
         .stat-item.success .stat-value { color: var(--success); }
         .stat-item.running .stat-value { color: var(--accent); }
+        .stat-item.error .stat-value { color: var(--error); }
+
+        /* Queue stat dropdown */
+        .stat-queue-wrapper {
+            position: relative;
+        }
+
+        .stat-queue-toggle {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            cursor: pointer;
+            padding: 4px 0;
+            margin: -4px 0;
+            border-radius: var(--radius-sm);
+            transition: opacity var(--transition-fast);
+        }
+
+        .stat-queue-toggle:hover {
+            opacity: 0.8;
+        }
+
+        .stat-queue-chevron {
+            width: 14px;
+            height: 14px;
+            color: var(--text-tertiary);
+            transition: transform var(--transition-fast);
+            flex-shrink: 0;
+        }
+
+        .stat-queue-wrapper.open .stat-queue-chevron {
+            transform: rotate(180deg);
+        }
+
+        .stat-queue-dropdown {
+            position: absolute;
+            top: calc(100% + 8px);
+            left: 50%;
+            transform: translateX(-50%) translateY(-4px);
+            opacity: 0;
+            visibility: hidden;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            box-shadow: var(--shadow-md);
+            padding: 12px 16px;
+            min-width: 140px;
+            z-index: 200;
+            transition: opacity var(--transition-fast), transform var(--transition-fast), visibility var(--transition-fast);
+        }
+
+        .stat-queue-wrapper.open .stat-queue-dropdown {
+            opacity: 1;
+            visibility: visible;
+            transform: translateX(-50%) translateY(0);
+        }
+
+        /* Hover behavior for desktop */
+        @media (hover: hover) {
+            .stat-queue-wrapper:hover .stat-queue-dropdown,
+            .stat-saved-wrapper:hover .stat-saved-dropdown {
+                opacity: 1;
+                visibility: visible;
+                transform: translateX(-50%) translateY(0);
+            }
+
+            .stat-queue-wrapper:hover .stat-queue-chevron,
+            .stat-saved-wrapper:hover .stat-saved-chevron {
+                transform: rotate(180deg);
+            }
+        }
+
+        .stat-queue-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 6px 0;
+        }
+
+        .stat-queue-row:not(:last-child) {
+            border-bottom: 1px solid var(--border);
+        }
+
+        .stat-queue-row-label {
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+        }
+
+        .stat-queue-row-value {
+            font-size: 0.9375rem;
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .stat-queue-row-value.running {
+            color: var(--accent);
+        }
 
         /* Saved stat dropdown */
         .stat-saved-wrapper {
@@ -1234,16 +1332,23 @@
 
         @media (max-width: 768px) {
             .header {
-                padding: 0 16px;
+                padding: 12px 16px;
+                height: auto;
+                align-items: flex-start;
             }
+
+            .header-left {
+                flex-wrap: wrap;
+                align-items: center;
+                max-width: calc(100% - 120px);
+            }
+
 
             .stats-bar {
-                gap: 12px;
-                margin-left: 16px;
-            }
-
-            .stat-label {
-                display: none;
+                gap: 10px;
+                margin-left: 0;
+                flex-basis: 100%;
+                margin-top: 8px;
             }
 
             .stat-value {
@@ -1368,13 +1473,32 @@
                     Shrinkray
                 </div>
                 <div class="stats-bar" id="stats-bar">
-                    <div class="stat-item running">
-                        <span class="stat-value" id="stat-running">0</span>
-                        <span class="stat-label">running</span>
+                    <div class="stat-item stat-queue-wrapper" id="stat-queue-wrapper">
+                        <div class="stat-queue-toggle" onclick="toggleQueueDropdown(event)">
+                            <span class="stat-value" id="stat-queue">0</span>
+                            <span class="stat-label">in queue</span>
+                            <svg class="stat-queue-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <polyline points="6 9 12 15 18 9"/>
+                            </svg>
+                        </div>
+                        <div class="stat-queue-dropdown">
+                            <div class="stat-queue-row">
+                                <span class="stat-queue-row-label">Running</span>
+                                <span class="stat-queue-row-value running" id="stat-running">0</span>
+                            </div>
+                            <div class="stat-queue-row">
+                                <span class="stat-queue-row-label">Pending</span>
+                                <span class="stat-queue-row-value" id="stat-pending">0</span>
+                            </div>
+                        </div>
                     </div>
-                    <div class="stat-item">
-                        <span class="stat-value" id="stat-pending">0</span>
-                        <span class="stat-label">pending</span>
+                    <div class="stat-item success">
+                        <span class="stat-value" id="stat-complete">0</span>
+                        <span class="stat-label">complete</span>
+                    </div>
+                    <div class="stat-item error" id="stat-failed-wrapper">
+                        <span class="stat-value" id="stat-failed">0</span>
+                        <span class="stat-label">failed</span>
                     </div>
                     <div class="stat-item success stat-saved-wrapper" id="stat-saved-wrapper">
                         <div class="stat-saved-toggle" onclick="toggleSavedDropdown(event)">
@@ -2635,8 +2759,27 @@
         })();
 
         function updateStats(stats) {
+            // Queue dropdown values
             document.getElementById('stat-pending').textContent = stats.pending;
             document.getElementById('stat-running').textContent = stats.running;
+
+            // Queue total (running + pending)
+            const inQueue = stats.running + stats.pending;
+            document.getElementById('stat-queue').textContent = inQueue;
+
+            // Apply running class if any jobs are running
+            const queueWrapper = document.getElementById('stat-queue-wrapper');
+            if (stats.running > 0) {
+                queueWrapper.classList.add('running');
+            } else {
+                queueWrapper.classList.remove('running');
+            }
+
+            // Complete count
+            document.getElementById('stat-complete').textContent = stats.complete || 0;
+
+            // Failed count
+            document.getElementById('stat-failed').textContent = stats.failed || 0;
 
             // Header shows session saved
             const sessionSaved = Math.max(0, stats.session_saved || stats.total_saved || 0);
@@ -2651,14 +2794,29 @@
 
         function toggleSavedDropdown(event) {
             event.stopPropagation();
+            // Only toggle on click for non-hover devices (mobile/touch)
+            if (window.matchMedia('(hover: hover)').matches) return;
+            document.getElementById('stat-queue-wrapper').classList.remove('open');
             document.getElementById('stat-saved-wrapper').classList.toggle('open');
         }
 
-        // Close dropdown when clicking outside
+        function toggleQueueDropdown(event) {
+            event.stopPropagation();
+            // Only toggle on click for non-hover devices (mobile/touch)
+            if (window.matchMedia('(hover: hover)').matches) return;
+            document.getElementById('stat-saved-wrapper').classList.remove('open');
+            document.getElementById('stat-queue-wrapper').classList.toggle('open');
+        }
+
+        // Close dropdowns when clicking outside
         document.addEventListener('click', function(event) {
-            const wrapper = document.getElementById('stat-saved-wrapper');
-            if (wrapper && !wrapper.contains(event.target)) {
-                wrapper.classList.remove('open');
+            const savedWrapper = document.getElementById('stat-saved-wrapper');
+            const queueWrapper = document.getElementById('stat-queue-wrapper');
+            if (savedWrapper && !savedWrapper.contains(event.target)) {
+                savedWrapper.classList.remove('open');
+            }
+            if (queueWrapper && !queueWrapper.contains(event.target)) {
+                queueWrapper.classList.remove('open');
             }
         });
 
