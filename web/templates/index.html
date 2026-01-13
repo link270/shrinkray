@@ -642,7 +642,14 @@
             height: 14px;
         }
 
-        /* Queue Filter */
+        /* Queue Controls */
+        .queue-controls {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-left: auto;
+        }
+
         .queue-filter {
             padding: 4px 8px;
             border: 1px solid var(--border);
@@ -652,7 +659,6 @@
             background: var(--bg-secondary);
             color: var(--text-primary);
             cursor: pointer;
-            margin-left: auto;
         }
 
         .queue-filter:hover {
@@ -1473,18 +1479,20 @@
                             </svg>
                             Queue
                         </span>
-                        <select class="queue-filter" id="queue-filter" onchange="setQueueFilter(this.value)">
-                            <option value="all">All</option>
-                            <option value="running">Running</option>
-                            <option value="pending">Pending</option>
-                            <option value="failed">Failed</option>
-                            <option value="complete">Complete</option>
-                            <option value="cancelled">Cancelled</option>
-                        </select>
-                        <label class="notify-label" id="notify-container" style="display: none">
-                            <input type="checkbox" id="notify-checkbox" onchange="updateNotifySetting(this.checked)">
-                            <span>Notify when done</span>
-                        </label>
+                        <div class="queue-controls">
+                            <label class="notify-label" id="notify-container" style="display: none">
+                                <input type="checkbox" id="notify-checkbox" onchange="updateNotifySetting(this.checked)">
+                                <span>Notify when done</span>
+                            </label>
+                            <select class="queue-filter" id="queue-filter" onchange="setQueueFilter(this.value)">
+                                <option value="all">All</option>
+                                <option value="running">Running</option>
+                                <option value="pending">Pending</option>
+                                <option value="failed">Failed</option>
+                                <option value="complete">Complete</option>
+                                <option value="cancelled">Cancelled</option>
+                            </select>
+                        </div>
                     </div>
                     <div id="processing-banner" class="processing-banner hidden">
                         <div class="processing-spinner"></div>
