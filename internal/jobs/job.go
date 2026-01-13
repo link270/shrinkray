@@ -53,6 +53,12 @@ func (j *Job) IsTerminal() bool {
 	return j.Status == StatusComplete || j.Status == StatusFailed || j.Status == StatusCancelled || j.Status == StatusSkipped
 }
 
+// Copy returns a shallow copy of the job (safe since Job has no pointer/slice fields)
+func (j *Job) Copy() *Job {
+	copy := *j
+	return &copy
+}
+
 // JobEvent represents an event for SSE streaming
 type JobEvent struct {
 	Type   string `json:"type"`            // "added", "jobs_added", "discovery_progress", "complete", "failed", "skipped", "cancelled", "progress"

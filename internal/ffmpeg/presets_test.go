@@ -504,13 +504,11 @@ func TestBuildPresetArgsHDRFilters(t *testing.T) {
 			if tt.enableTonemap {
 				// Tonemap should be in args if filter is available
 				t.Logf("Checking for tonemap-related filter: %s", tt.expectFilter)
-			} else {
+			} else if strings.Contains(tt.expectFilter, "p010") {
 				// HDR preservation - check for p010 format
-				if strings.Contains(tt.expectFilter, "p010") {
-					if !strings.Contains(allArgs, "p010") {
-						// p010 might be substituted dynamically based on HDR state
-						t.Logf("p010 not found, but may be handled dynamically")
-					}
+				if !strings.Contains(allArgs, "p010") {
+					// p010 might be substituted dynamically based on HDR state
+					t.Logf("p010 not found, but may be handled dynamically")
 				}
 			}
 		})
