@@ -309,31 +309,19 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, sourceWidth, sourceHei
 	// Check if we need to preserve HDR (HDR source, tonemapping disabled)
 	preserveHDR := tonemap != nil && tonemap.IsHDR && !tonemap.EnableTonemap
 	var tonemapFilter string
-	var tonemapRequiresSWDecode bool
 	if needsTonemap {
 		algorithm := tonemap.Algorithm
 		if algorithm == "" {
 			algorithm = "hable"
 		}
-		tonemapFilter, tonemapRequiresSWDecode = BuildTonemapFilter(preset.Encoder, algorithm)
-
-		// If tonemap requires SW decode, force it
-		if tonemapRequiresSWDecode {
-			softwareDecode = true
-		}
+		tonemapFilter, _ = BuildTonemapFilter(algorithm)
+		// Software tonemapping requires software decode
+		softwareDecode = true
 	}
 
 	// Input args: hardware acceleration for decoding
 	// Generated dynamically based on encoder type
 	inputArgs = getHwaccelInputArgs(preset.Encoder, softwareDecode)
-
-	// For QSV with OpenCL tonemapping, add OpenCL device initialization
-	if needsTonemap && preset.Encoder == HWAccelQSV && IsTonemapFilterAvailable("tonemap_opencl") {
-		// Add OpenCL device init for tonemap_opencl filter
-		// Insert before QSV device init
-		oclArgs := []string{"-init_hw_device", "opencl=ocl:0"}
-		inputArgs = append(oclArgs, inputArgs...)
-	}
 
 	// Output args
 	outputArgs = []string{}
@@ -361,21 +349,16 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, sourceWidth, sourceHei
 	}
 
 	// Add tonemapping filter if needed
-	// For SW tonemap with HW encode, the tonemap goes after SW decode but before hwupload
+	// Software tonemap (zscale) goes before hwupload since it requires CPU frames
 	if needsTonemap && tonemapFilter != "" {
-		if tonemapRequiresSWDecode {
-			// Software tonemap - insert at beginning (before hwupload)
-			// The zscale chain expects CPU frames and outputs CPU frames
-			filterParts = []string{tonemapFilter}
-			// Re-add hwupload after tonemap if encoder needs it
-			// Tonemap outputs 8-bit SDR, so preserveHDR=false
-			swFilter := getSoftwareDecodeFilter(preset.Encoder, false)
-			if swFilter != "" {
-				filterParts = append(filterParts, swFilter)
-			}
-		} else {
-			// Hardware tonemap - add to filter chain
-			filterParts = append(filterParts, tonemapFilter)
+		// Software tonemap - insert at beginning (before hwupload)
+		// The zscale chain expects CPU frames and outputs CPU frames
+		filterParts = []string{tonemapFilter}
+		// Re-add hwupload after tonemap if encoder needs it
+		// Tonemap outputs 8-bit SDR, so preserveHDR=false
+		swFilter := getSoftwareDecodeFilter(preset.Encoder, false)
+		if swFilter != "" {
+			filterParts = append(filterParts, swFilter)
 		}
 	}
 
@@ -582,45 +565,14 @@ func getSoftwareDecodeFilter(encoder HWAccel, preserveHDR bool) string {
 }
 
 // BuildTonemapFilter returns the FFmpeg filter chain for HDR to SDR tonemapping.
-// Returns the filter string and whether it requires software decode (for HW encode with SW tonemap).
+// Returns the filter string and whether it requires software decode.
+// Uses software tonemapping (zscale) for universal compatibility across all hardware.
 // The algorithm parameter should be one of: hable, bt2390, reinhard, mobius, clip, linear, gamma.
-func BuildTonemapFilter(encoder HWAccel, algorithm string) (filter string, requiresSoftwareDecode bool) {
-	// Check what tonemap filter is available for this encoder
-	filterName, isHardware := GetTonemapFilterForEncoder(encoder)
-	if filterName == "" {
-		// No tonemapping available
-		return "", false
-	}
-
-	// Hardware tonemapping paths - these work with HW decode/encode pipeline
-	if isHardware {
-		switch filterName {
-		case "tonemap_vaapi":
-			// VAAPI hardware tonemapping - simple and efficient
-			// Converts HDR10 (BT.2020 PQ) to SDR (BT.709)
-			return "tonemap_vaapi=format=nv12:p=bt709:t=bt709:m=bt709", false
-
-		case "tonemap_cuda":
-			// NVIDIA CUDA tonemapping - full parameter control
-			return fmt.Sprintf("tonemap_cuda=format=nv12:primaries=bt709:transfer=bt709:matrix=bt709:tonemap=%s:peak=100:desat=0", algorithm), false
-
-		case "tonemap_opencl":
-			// OpenCL tonemapping (used by QSV) - cross-platform HW path
-			// Note: Requires OpenCL device initialization in input args
-			return fmt.Sprintf("tonemap_opencl=format=nv12:p=bt709:t=bt709:m=bt709:tonemap=%s:peak=100:desat=0", algorithm), false
-		}
-	}
-
-	// Software tonemapping fallback - requires SW decode
-	// zscale chain: HDR (BT.2020 PQ) -> linear -> tonemap -> SDR (BT.709)
-	// This is slower but works universally
+func BuildTonemapFilter(algorithm string) (filter string, requiresSoftwareDecode bool) {
+	// Software tonemapping via zscale - works universally with all encoders
+	// Pipeline: HDR (BT.2020 PQ) -> linear light -> tonemap -> SDR (BT.709)
+	// Encoding is still hardware-accelerated; only tonemapping uses CPU
 	return fmt.Sprintf("zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=%s:desat=0:peak=100,zscale=t=bt709:m=bt709,format=yuv420p", algorithm), true
-}
-
-// GetSoftwareTonemapFilter returns the software tonemapping filter chain.
-// Used when hardware tonemapping is not available.
-func GetSoftwareTonemapFilter(algorithm string) string {
-	return fmt.Sprintf("zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=%s:desat=0:peak=100,zscale=t=bt709:m=bt709,format=yuv420p", algorithm)
 }
 
 // ListPresets returns all available presets

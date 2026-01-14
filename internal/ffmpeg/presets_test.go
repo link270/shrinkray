@@ -473,10 +473,12 @@ func TestBuildPresetArgsHDRFilters(t *testing.T) {
 		enableTonemap  bool
 		expectFilter   string // Substring expected in filter
 	}{
-		{"VAAPI tonemap", HWAccelVAAPI, true, "tonemap_vaapi"},
-		{"NVENC tonemap", HWAccelNVENC, true, "tonemap_cuda"},
-		{"QSV tonemap", HWAccelQSV, true, "tonemap_opencl"},
+		// All encoders use software tonemapping (zscale) for reliability
+		{"VAAPI tonemap", HWAccelVAAPI, true, "zscale"},
+		{"NVENC tonemap", HWAccelNVENC, true, "zscale"},
+		{"QSV tonemap", HWAccelQSV, true, "zscale"},
 		{"Software tonemap", HWAccelNone, true, "zscale"},
+		// HDR preservation uses p010 format
 		{"VAAPI HDR preserve", HWAccelVAAPI, false, "p010"},
 		{"NVENC HDR preserve", HWAccelNVENC, false, "p010"},
 	}
@@ -515,49 +517,27 @@ func TestBuildPresetArgsHDRFilters(t *testing.T) {
 	}
 }
 
-// TestBuildTonemapFilter tests the tonemap filter builder for each encoder
+// TestBuildTonemapFilter tests the software tonemap filter builder
 func TestBuildTonemapFilter(t *testing.T) {
-	tests := []struct {
-		encoder       HWAccel
-		hwFilter      string // Preferred hardware filter
-		swFilter      string // Software fallback filter
-	}{
-		{HWAccelVAAPI, "tonemap_vaapi", "zscale"},
-		{HWAccelNVENC, "tonemap_cuda", "zscale"},
-		{HWAccelQSV, "tonemap_opencl", "zscale"},
-		{HWAccelVideoToolbox, "", "zscale"}, // No HW tonemap for VideoToolbox
-		{HWAccelNone, "", "zscale"},
-	}
+	algorithms := []string{"hable", "bt2390", "reinhard", "mobius"}
 
-	hwAccelNames := map[HWAccel]string{
-		HWAccelVAAPI:        "VAAPI",
-		HWAccelNVENC:        "NVENC",
-		HWAccelQSV:          "QSV",
-		HWAccelVideoToolbox: "VideoToolbox",
-		HWAccelNone:         "Software",
-	}
-	for _, tt := range tests {
-		t.Run(hwAccelNames[tt.encoder], func(t *testing.T) {
-			filter, requiresSWDec := BuildTonemapFilter(tt.encoder, "hable")
+	for _, algo := range algorithms {
+		t.Run(algo, func(t *testing.T) {
+			filter, requiresSWDec := BuildTonemapFilter(algo)
 
-			// Filter availability depends on system
-			t.Logf("Encoder %s: filter=%q, requiresSWDec=%v", hwAccelNames[tt.encoder], filter, requiresSWDec)
+			// Should always return a zscale-based filter
+			if !strings.Contains(filter, "zscale") {
+				t.Errorf("expected filter to contain 'zscale', got %q", filter)
+			}
 
-			// If filter is returned, check it matches expected type
-			if filter != "" {
-				// Check for either HW filter or SW fallback
-				hasHWFilter := tt.hwFilter != "" && strings.Contains(filter, tt.hwFilter)
-				hasSWFilter := strings.Contains(filter, tt.swFilter)
+			// Should contain the requested algorithm
+			if !strings.Contains(filter, algo) {
+				t.Errorf("expected filter to contain algorithm %q, got %q", algo, filter)
+			}
 
-				if !hasHWFilter && !hasSWFilter {
-					t.Errorf("expected filter to contain %q (HW) or %q (SW), got %q",
-						tt.hwFilter, tt.swFilter, filter)
-				}
-
-				// SW decode required when using SW tonemap
-				if hasSWFilter && !hasHWFilter && !requiresSWDec {
-					t.Errorf("expected requiresSWDec=true when using SW tonemap for %s", hwAccelNames[tt.encoder])
-				}
+			// Software tonemapping always requires SW decode
+			if !requiresSWDec {
+				t.Error("expected requiresSWDec=true for software tonemapping")
 			}
 		})
 	}

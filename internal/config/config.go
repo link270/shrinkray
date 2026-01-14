@@ -67,9 +67,9 @@ type Config struct {
 	// MKV preserves all streams; MP4 transcodes audio to AAC and strips subtitles
 	OutputFormat string `yaml:"output_format"`
 
-	// TonemapHDR enables automatic HDR to SDR conversion (default: true)
-	// When enabled, HDR content (HDR10, HLG) is automatically tonemapped to SDR
-	// to prevent washed-out appearance on non-HDR displays
+	// TonemapHDR enables automatic HDR to SDR conversion (default: false)
+	// When enabled, HDR content (HDR10, HLG) is tonemapped to SDR using CPU.
+	// When disabled, HDR metadata is preserved for HDR-capable displays.
 	TonemapHDR bool `yaml:"tonemap_hdr"`
 
 	// TonemapAlgorithm is the tonemapping algorithm to use: "hable", "bt2390", "reinhard"
@@ -94,7 +94,7 @@ func DefaultConfig() *Config {
 		ScheduleEndHour:   6,  // 6 AM
 		LogLevel:          "info",
 		OutputFormat:      "mkv",
-		TonemapHDR:        true,    // Auto-convert HDR to SDR by default
+		TonemapHDR:        false,   // HDR passthrough by default; enable for SDR conversion (uses CPU)
 		TonemapAlgorithm:  "hable", // Filmic tonemapping, good for movies
 	}
 }
