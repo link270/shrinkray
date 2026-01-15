@@ -140,29 +140,6 @@ Restrict transcoding to specific hours to reduce system load during the day.
 
 ---
 
-## HDR Support
-
-Shrinkray automatically detects HDR content (HDR10, HLG, and 10-bit BT.2020) and displays an HDR badge on files and jobs.
-
-### Tonemapping (HDR → SDR)
-
-By default, HDR metadata is preserved during transcoding. If you need SDR output for compatibility:
-
-1. Open **Settings** (gear icon)
-2. Enable **Tonemap HDR to SDR**
-3. Select an algorithm (hable is recommended)
-
-**Note:** Tonemapping uses CPU-based filtering (zscale) but hardware encoding is still used for the actual encode. Expect slower processing compared to HDR passthrough.
-
-### HDR Preservation
-
-When tonemapping is disabled (default):
-- 10-bit p010 pixel format is preserved
-- BT.2020 color metadata is maintained
-- HEVC Main10 profile is used automatically
-
----
-
 ## Configuration
 
 Configuration is stored in `/config/shrinkray.yaml`. Most settings are available in the WebUI.
