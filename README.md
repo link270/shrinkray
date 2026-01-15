@@ -20,6 +20,7 @@ Shrinkray is a user-friendly video transcoding tool designed to be simple from t
 
 - **4 Smart Presets** — HEVC compress, AV1 compress, 1080p downscale, 720p downscale
 - **Full GPU Pipeline** — Hardware decoding AND encoding with software fallback
+- **HDR Support** — Automatic HDR detection with optional HDR-to-SDR tonemapping
 - **Batch Selection** — Select entire folders to transcode whole seasons or libraries at once
 - **Scheduling** — Restrict transcoding to specific hours (e.g., overnight only)
 - **Quality Control** — Adjustable CRF for fine-tuned compression
@@ -139,6 +140,29 @@ Restrict transcoding to specific hours to reduce system load during the day.
 
 ---
 
+## HDR Support
+
+Shrinkray automatically detects HDR content (HDR10, HLG, and 10-bit BT.2020) and displays an HDR badge on files and jobs.
+
+### Tonemapping (HDR → SDR)
+
+By default, HDR metadata is preserved during transcoding. If you need SDR output for compatibility:
+
+1. Open **Settings** (gear icon)
+2. Enable **Tonemap HDR to SDR**
+3. Select an algorithm (hable is recommended)
+
+**Note:** Tonemapping uses CPU-based filtering (zscale) but hardware encoding is still used for the actual encode. Expect slower processing compared to HDR passthrough.
+
+### HDR Preservation
+
+When tonemapping is disabled (default):
+- 10-bit p010 pixel format is preserved
+- BT.2020 color metadata is maintained
+- HEVC Main10 profile is used automatically
+
+---
+
 ## Configuration
 
 Configuration is stored in `/config/shrinkray.yaml`. Most settings are available in the WebUI.
@@ -159,6 +183,8 @@ Configuration is stored in `/config/shrinkray.yaml`. Most settings are available
 | `log_level` | `info` | Logging verbosity: `debug`, `info`, `warn`, `error` |
 | `keep_larger_files` | `false` | Keep transcoded files even if larger than original |
 | `output_format` | `mkv` | Output container: `mkv` (preserves all streams) or `mp4` (web compatible) |
+| `tonemap_hdr` | `false` | Convert HDR content to SDR (uses CPU tonemapping) |
+| `tonemap_algorithm` | `hable` | Tonemapping algorithm: `hable`, `bt2390`, `reinhard`, `mobius` |
 
 ### Example Configuration
 
