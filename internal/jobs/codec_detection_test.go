@@ -329,10 +329,12 @@ func TestRequiresSoftwareDecodeProactive(t *testing.T) {
 		encoder  ffmpeg.HWAccel
 		expected bool
 	}{
-		// === H.264 10-bit - Universal hardware limitation ===
+		// === H.264 10-bit ===
+		// NVENC: Let FFmpeg try HW decode (RTX 50 supports 4:2:2 10-bit)
+		// Others: Proactively use software decode
 		{"H264_10bit_QSV", "h264", "High 10", 10, ffmpeg.HWAccelQSV, true},
 		{"H264_10bit_VAAPI", "h264", "High 10", 10, ffmpeg.HWAccelVAAPI, true},
-		{"H264_10bit_NVENC", "h264", "High 10", 10, ffmpeg.HWAccelNVENC, true},
+		{"H264_10bit_NVENC", "h264", "High 10", 10, ffmpeg.HWAccelNVENC, false}, // Let NVENC try
 		{"H264_10bit_VideoToolbox", "h264", "High 10", 10, ffmpeg.HWAccelVideoToolbox, true},
 		{"AVC_10bit_QSV", "avc", "High 10", 10, ffmpeg.HWAccelQSV, true},
 

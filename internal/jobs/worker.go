@@ -471,7 +471,7 @@ func (w *Worker) processJob(job *Job) {
 		// If using hardware encoder and it failed, retry with software decode
 		// Skip if we already used software decode
 		if !useSoftwareDecode && shouldRetryWithSoftwareDecode(preset.Encoder) {
-			logger.Info("Hardware transcode failed, retrying with software decode", "job_id", job.ID)
+			logger.Warn("Hardware transcode failed, retrying with software decode", "job_id", job.ID, "error", err.Error())
 
 			// Create new progress channel for retry
 			retryProgressCh := make(chan ffmpeg.Progress, 10)

@@ -211,25 +211,45 @@ func crfToBitrateModifier(crf int) float64 {
 func getHwaccelInputArgs(encoder HWAccel, softwareDecode bool) []string {
 	switch encoder {
 	case HWAccelNVENC:
-		// NVIDIA CUDA - simple init
-		// Per NVIDIA FFmpeg guide: https://developer.nvidia.com/blog/nvidia-ffmpeg-transcoding-guide/
-		args := []string{
-			"-init_hw_device", "cuda=cu:0",
-			"-filter_hw_device", "cu",
+		// NVIDIA CUDA - use the init mode detected at startup
+		// Simple init works on most Docker setups
+		// Explicit init required for CUDA filters on bare metal
+		if GetNVENCInitMode() == NVENCInitExplicit {
+			args := []string{
+				"-init_hw_device", "cuda=cu:0",
+				"-filter_hw_device", "cu",
+			}
+			if !softwareDecode {
+				args = append(args, "-hwaccel", "cuda", "-hwaccel_output_format", "cuda")
+			}
+			return args
 		}
+		// Simple init (default, works on Docker)
 		if !softwareDecode {
-			args = append(args, "-hwaccel", "cuda", "-hwaccel_output_format", "cuda")
+			return []string{"-hwaccel", "cuda", "-hwaccel_output_format", "cuda"}
 		}
-		return args
+		return nil
 
 	case HWAccelQSV:
-		// Intel QSV - MUST derive from VAAPI on Linux
-		// Per Jellyfin: https://github.com/jellyfin/jellyfin/blob/master/MediaBrowser.Controller/MediaEncoding/EncodingHelper.cs
-		device := GetVAAPIDevice()
+		// Intel QSV - use the init mode detected at startup
+		// Direct init works on most Docker/Unraid setups
+		// VAAPI-derived works on bare metal Linux (Jellyfin approach)
+		if GetQSVInitMode() == QSVInitVAAPI {
+			device := GetVAAPIDevice()
+			args := []string{
+				"-init_hw_device", "vaapi=va:" + device,
+				"-init_hw_device", "qsv=qs@va",
+				"-filter_hw_device", "qs",
+			}
+			if !softwareDecode {
+				args = append(args, "-hwaccel", "qsv", "-hwaccel_output_format", "qsv")
+			}
+			return args
+		}
+		// Direct QSV init (default, works on Docker)
 		args := []string{
-			"-init_hw_device", "vaapi=va:" + device,
-			"-init_hw_device", "qsv=qs@va",
-			"-filter_hw_device", "qs",
+			"-init_hw_device", "qsv=qsv",
+			"-filter_hw_device", "qsv",
 		}
 		if !softwareDecode {
 			args = append(args, "-hwaccel", "qsv", "-hwaccel_output_format", "qsv")
@@ -493,4 +513,3 @@ func ListPresets() []*Preset {
 
 	return result
 }
-

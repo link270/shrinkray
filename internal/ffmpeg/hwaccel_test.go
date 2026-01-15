@@ -15,17 +15,21 @@ func TestRequiresSoftwareDecode(t *testing.T) {
 		encoder  HWAccel
 		expected bool
 	}{
-		// === H.264 10-bit - Universal hardware limitation ===
-		// NO GPU on any platform supports H.264 10-bit (High 10 profile) decode
+		// === H.264 10-bit High10 profile (4:2:0) ===
+		// Most GPUs don't support H.264 10-bit decode, but RTX 50 series added 4:2:2 10-bit.
+		// NVENC: Let FFmpeg attempt HW decode, rely on runtime fallback for unsupported formats.
+		// Other encoders: Proactively use software decode since none support H.264 10-bit.
 		{"H264_10bit_QSV", "h264", "High 10", 10, HWAccelQSV, true},
 		{"H264_10bit_VAAPI", "h264", "High 10", 10, HWAccelVAAPI, true},
-		{"H264_10bit_NVENC", "h264", "High 10", 10, HWAccelNVENC, true},
+		{"H264_10bit_NVENC", "h264", "High 10", 10, HWAccelNVENC, false}, // Let NVENC try (RTX 50 supports 4:2:2)
 		{"H264_10bit_VideoToolbox", "h264", "High 10", 10, HWAccelVideoToolbox, true},
 		{"AVC_10bit_QSV", "avc", "High 10", 10, HWAccelQSV, true},
 		{"AVC_10bit_VAAPI", "avc", "High 10", 10, HWAccelVAAPI, true},
+		{"AVC_10bit_NVENC", "avc", "High 10", 10, HWAccelNVENC, false}, // Let NVENC try
 
 		// H.264 10-bit with various bit depths >= 10
 		{"H264_12bit", "h264", "High 10", 12, HWAccelQSV, true},
+		{"H264_12bit_NVENC", "h264", "High 10", 12, HWAccelNVENC, false}, // Let NVENC try
 
 		// === H.264 8-bit - Hardware decode supported ===
 		{"H264_8bit_High_QSV", "h264", "High", 8, HWAccelQSV, false},
@@ -109,16 +113,24 @@ func TestRequiresSoftwareDecode_AllEncoders(t *testing.T) {
 		HWAccelVAAPI,
 	}
 
-	// H.264 10-bit should require software decode on ALL hardware encoders
+	// H.264 10-bit behavior varies by encoder:
+	// - NVENC: Let FFmpeg try HW decode (RTX 50 supports 4:2:2 10-bit)
+	// - Others: Proactively use software decode
 	for _, enc := range encoders {
 		result := RequiresSoftwareDecode("h264", "High 10", 10, enc)
-		if enc == HWAccelNone {
+		switch enc {
+		case HWAccelNone:
 			// Software encoder doesn't need fallback
 			if result {
 				t.Errorf("HWAccelNone should not require software decode, got true")
 			}
-		} else {
-			// All hardware encoders should require software decode
+		case HWAccelNVENC:
+			// NVENC: Let FFmpeg attempt HW decode (RTX 50 series may support it)
+			if result {
+				t.Errorf("HWAccelNVENC should NOT proactively require software decode for H.264 10-bit, got true")
+			}
+		default:
+			// Other hardware encoders should require software decode
 			if !result {
 				t.Errorf("%v should require software decode for H.264 10-bit, got false", enc)
 			}

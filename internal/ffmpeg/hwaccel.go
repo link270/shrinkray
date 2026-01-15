@@ -47,12 +47,30 @@ type EncoderKey struct {
 	Codec Codec
 }
 
+// QSVInitMode indicates how QSV should be initialized on Linux
+type QSVInitMode int
+
+const (
+	QSVInitDirect QSVInitMode = iota // -init_hw_device qsv=qsv (works on most Docker setups)
+	QSVInitVAAPI                     // -init_hw_device vaapi=va:... -init_hw_device qsv=qs@va (Jellyfin style)
+)
+
+// NVENCInitMode indicates how NVENC should be initialized
+type NVENCInitMode int
+
+const (
+	NVENCInitSimple   NVENCInitMode = iota // -hwaccel cuda (works on most Docker setups)
+	NVENCInitExplicit                      // -init_hw_device cuda=cu:0 (required for CUDA filters)
+)
+
 // AvailableEncoders holds the detected hardware encoders
 type AvailableEncoders struct {
-	mu          sync.RWMutex
-	encoders    map[EncoderKey]*HWEncoder
-	detected    bool
-	vaapiDevice string // Auto-detected VAAPI device path (e.g., /dev/dri/renderD128)
+	mu            sync.RWMutex
+	encoders      map[EncoderKey]*HWEncoder
+	detected      bool
+	vaapiDevice   string        // Auto-detected VAAPI device path (e.g., /dev/dri/renderD128)
+	qsvInitMode   QSVInitMode   // Which QSV init method works on this system
+	nvencInitMode NVENCInitMode // Which NVENC init method works on this system
 }
 
 // Global encoder detection cache
@@ -229,16 +247,32 @@ func testEncoder(ffmpegPath string, encoder string) bool {
 
 	var args []string
 
-	// QSV on Linux: Must derive from VAAPI (this is the Jellyfin approach)
-	// This tests the actual pipeline we use in production
+	// QSV on Linux: try direct init first, fall back to VAAPI-derived if needed.
+	// Store which mode works so we use it consistently at runtime.
 	if strings.Contains(encoder, "qsv") && runtime.GOOS == "linux" {
+		// Try direct init first (works on most Docker/Unraid setups)
+		directArgs := []string{
+			"-init_hw_device", "qsv=qsv",
+			"-filter_hw_device", "qsv",
+			"-f", "lavfi",
+			"-i", "color=c=black:s=256x256:d=0.1",
+			"-vf", "format=nv12,hwupload=extra_hw_frames=64",
+			"-frames:v", "1",
+			"-c:v", encoder,
+			"-f", "null",
+			"-",
+		}
+		if exec.CommandContext(ctx, ffmpegPath, directArgs...).Run() == nil {
+			availableEncoders.qsvInitMode = QSVInitDirect
+			return true
+		}
+
+		// Direct init failed, try VAAPI-derived (Jellyfin style)
 		device := detectVAAPIDevice()
 		if device == "" {
-			return false // No VAAPI device found - QSV won't work on Linux
+			return false // No VAAPI device found - QSV won't work
 		}
-		// Store the detected device for later use
 		availableEncoders.vaapiDevice = device
-		// Test QSV with VAAPI derivation - matches presets.go pipeline
 		args = []string{
 			"-init_hw_device", "vaapi=va:" + device,
 			"-init_hw_device", "qsv=qs@va",
@@ -251,6 +285,11 @@ func testEncoder(ffmpegPath string, encoder string) bool {
 			"-f", "null",
 			"-",
 		}
+		if exec.CommandContext(ctx, ffmpegPath, args...).Run() == nil {
+			availableEncoders.qsvInitMode = QSVInitVAAPI
+			return true
+		}
+		return false
 	} else if strings.Contains(encoder, "vaapi") {
 		// VAAPI: Use modern init_hw_device style (matches presets.go)
 		device := detectVAAPIDevice()
@@ -270,8 +309,44 @@ func testEncoder(ffmpegPath string, encoder string) bool {
 			"-f", "null",
 			"-",
 		}
+	} else if strings.Contains(encoder, "nvenc") {
+		// NVENC: try simple init first (works on most Docker setups)
+		// then fall back to explicit CUDA device init if needed
+		simpleArgs := []string{
+			"-hwaccel", "cuda",
+			"-hwaccel_output_format", "cuda",
+			"-f", "lavfi",
+			"-i", "color=c=black:s=256x256:d=0.1",
+			"-frames:v", "1",
+			"-c:v", encoder,
+			"-f", "null",
+			"-",
+		}
+		if exec.CommandContext(ctx, ffmpegPath, simpleArgs...).Run() == nil {
+			availableEncoders.nvencInitMode = NVENCInitSimple
+			return true
+		}
+
+		// Simple init failed, try explicit CUDA device init
+		explicitArgs := []string{
+			"-init_hw_device", "cuda=cu:0",
+			"-filter_hw_device", "cu",
+			"-hwaccel", "cuda",
+			"-hwaccel_output_format", "cuda",
+			"-f", "lavfi",
+			"-i", "color=c=black:s=256x256:d=0.1",
+			"-frames:v", "1",
+			"-c:v", encoder,
+			"-f", "null",
+			"-",
+		}
+		if exec.CommandContext(ctx, ffmpegPath, explicitArgs...).Run() == nil {
+			availableEncoders.nvencInitMode = NVENCInitExplicit
+			return true
+		}
+		return false
 	} else {
-		// Non-VAAPI/QSV encoders (NVENC, VideoToolbox) can accept software frames directly
+		// Other encoders (VideoToolbox) can accept software frames directly
 		args = []string{
 			"-f", "lavfi",
 			"-i", "color=c=black:s=256x256:d=0.1",
@@ -301,6 +376,22 @@ func GetVAAPIDevice() string {
 	}
 	// Fallback to common default
 	return "/dev/dri/renderD128"
+}
+
+// GetQSVInitMode returns the detected QSV initialization mode.
+// This is determined at startup by probing which init method works.
+func GetQSVInitMode() QSVInitMode {
+	availableEncoders.mu.RLock()
+	defer availableEncoders.mu.RUnlock()
+	return availableEncoders.qsvInitMode
+}
+
+// GetNVENCInitMode returns the detected NVENC initialization mode.
+// This is determined at startup by probing which init method works.
+func GetNVENCInitMode() NVENCInitMode {
+	availableEncoders.mu.RLock()
+	defer availableEncoders.mu.RUnlock()
+	return availableEncoders.nvencInitMode
 }
 
 // GetEncoderByKey returns a specific encoder by accel type and codec
@@ -401,9 +492,12 @@ func RequiresSoftwareDecode(codec, profile string, bitDepth int, encoder HWAccel
 	codec = strings.ToLower(codec)
 	profile = strings.ToLower(profile)
 
-	// H.264/AVC 10-bit (High 10 profile) - NO GPU supports this
-	// This is a universal hardware limitation, not driver-specific
-	if (codec == "h264" || codec == "avc") && bitDepth >= 10 {
+	// H.264/AVC 10-bit handling varies by hardware:
+	// - High10 profile (4:2:0 10-bit): No GPU supports this, software decode required
+	// - High 4:2:2 profile (4:2:2 10-bit): RTX 50 series supports hardware decode
+	// For NVENC, we let FFmpeg attempt hardware decode and rely on runtime fallback.
+	// For other encoders, we proactively use software decode since none support H.264 10-bit.
+	if (codec == "h264" || codec == "avc") && bitDepth >= 10 && encoder != HWAccelNVENC {
 		return true
 	}
 
@@ -425,8 +519,9 @@ func RequiresSoftwareDecode(codec, profile string, bitDepth int, encoder HWAccel
 			return true
 		}
 	case HWAccelNVENC:
-		// NVDEC has broader codec support but still no H.264 10-bit
-		// VC-1 decode was dropped in newer drivers
+		// NVDEC has broad codec support. RTX 50 series added H.264 4:2:2 10-bit,
+		// but High10 profile (4:2:0 10-bit) remains unsupported (caught above).
+		// VC-1 decode was dropped in newer drivers.
 		if codec == "vc1" {
 			return true
 		}
