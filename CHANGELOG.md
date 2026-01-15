@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.0] - 2026-01-15
+
+### Added
+- **HDR detection and tonemapping support** (#65)
+  - Automatic HDR detection via color metadata (HDR10/PQ, HLG) with 10-bit BT.2020 fallback
+  - Optional HDR-to-SDR tonemapping using software zscale filter (works on all systems)
+  - HDR badge displayed on jobs and files in the UI
+  - Tonemap toggle in Settings (default: OFF to preserve HDR metadata)
+  - When tonemapping is disabled, HDR content preserves 10-bit p010 format and BT.2020 color
+  - Hardware encoding still used when tonemapping - only the filter runs on CPU
+- **Distinct "Skipped" status for already-encoded files** (#72)
+  - Files already in target codec now show "Skipped" (yellow) instead of "Failed" (red)
+  - Clearer distinction between actual failures and intentionally skipped files
+  - Skipped jobs tracked separately in stats
+  - "Clear by status" dropdown includes Skipped option
+
+### Fixed
+- **Data race in job event broadcasting** (#73)
+  - Job events now use shallow copies to prevent race conditions
+  - Fixes potential crashes when multiple subscribers receive events during job updates
+
+### Changed
+- Database schema updated to v4 (adds `is_hdr` column with automatic migration)
+- SSE events now include HDR metadata for frontend display
+
 ## [1.7.5] - 2026-01-15
 
 ### Fixed
