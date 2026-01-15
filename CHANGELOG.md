@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.7.5] - 2026-01-15
+
+### Fixed
+- **QSV/NVENC hardware acceleration broken in Docker** (#67)
+  - QSV now tries direct init first, falls back to VAAPI-derived if needed
+  - NVENC tries simple init first, falls back to explicit CUDA device init
+  - Init mode detected once at startup instead of runtime retry logic
+  - RTX 50 series can now attempt H.264 4:2:2 10-bit hardware decode
+
+### Changed
+- Simplified worker.go by removing HW init retry logic (detection handles it)
+- Updated comments to clarify H.264 High10 (4:2:0) vs 4:2:2 10-bit support
+
 ## [1.7.3] - 2026-01-13
 
 ### Fixed
