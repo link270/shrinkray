@@ -215,10 +215,14 @@ go test ./...
 
 ---
 
-## More Documentation
+## Documentation
 
-- [FAQ](docs/faq.md) - Common questions about CPU usage, skipped files, HDR, and more
-- [FFmpeg Options Reference](docs/ffmpeg-options.md) - Detailed encoder settings and quality flags
+| Topic | Description |
+|-------|-------------|
+| [FAQ](docs/FAQ.md) | Common questions about CPU usage, skipped files, HDR |
+| [FFmpeg Options](docs/ffmpeg-options.md) | Encoder settings and quality flags |
+| [API Reference](docs/api/) | REST API endpoints and SSE events |
+| [Architecture](docs/architecture/) | System design and package structure |
 
 ---
 
