@@ -93,6 +93,45 @@ create_subtitles
 echo ""
 
 # ============================================================================
+# BIT DEPTH DETECTION TEST FILES - For TestProbe_BitDepthDetection
+# ============================================================================
+echo "--- Bit Depth Detection Test Files ---"
+
+# H.264 8-bit High profile
+generate "test_h264_8bit_high.mp4" "H.264 8-bit High profile" \
+    -y -f lavfi -i "testsrc2=s=1280x720:d=2:r=30" \
+    -f lavfi -i "sine=f=440:d=2" \
+    -c:v libx264 -pix_fmt yuv420p -profile:v high -crf 23 -preset ultrafast \
+    -c:a aac -b:a 128k \
+    test_h264_8bit_high.mp4
+
+# H.264 10-bit High 10 profile
+generate "test_h264_10bit_high10.mkv" "H.264 10-bit High 10 profile" \
+    -y -f lavfi -i "testsrc2=s=1280x720:d=2:r=30" \
+    -f lavfi -i "sine=f=440:d=2" \
+    -c:v libx264 -pix_fmt yuv420p10le -profile:v high10 -crf 23 -preset ultrafast \
+    -c:a aac -b:a 128k \
+    test_h264_10bit_high10.mkv
+
+# HEVC 8-bit Main profile
+generate "test_hevc_8bit_main.mkv" "HEVC 8-bit Main profile" \
+    -y -f lavfi -i "testsrc2=s=1280x720:d=2:r=30" \
+    -f lavfi -i "sine=f=440:d=2" \
+    -c:v libx265 -pix_fmt yuv420p -profile:v main -crf 28 -preset ultrafast -x265-params log-level=error \
+    -c:a aac -b:a 128k \
+    test_hevc_8bit_main.mkv
+
+# HEVC 10-bit Main 10 profile
+generate "test_hevc_10bit_main10.mkv" "HEVC 10-bit Main 10 profile" \
+    -y -f lavfi -i "testsrc2=s=1280x720:d=2:r=30" \
+    -f lavfi -i "sine=f=440:d=2" \
+    -c:v libx265 -pix_fmt yuv420p10le -profile:v main10 -crf 28 -preset ultrafast -x265-params log-level=error \
+    -c:a aac -b:a 128k \
+    test_hevc_10bit_main10.mkv
+
+echo ""
+
+# ============================================================================
 # H.264 TEST FILES - Most comprehensive since it's the most common source
 # ============================================================================
 echo "--- H.264 Test Files (most common source format) ---"
