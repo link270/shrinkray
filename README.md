@@ -24,8 +24,10 @@ Shrinkray is a user-friendly video transcoding tool designed to be simple from t
 - **Batch Selection** — Select entire folders to transcode whole seasons or libraries at once
 - **Scheduling** — Restrict transcoding to specific hours (e.g., overnight only)
 - **Quality Control** — Adjustable CRF for fine-tuned compression
+- **Queue Management** — Sort by name, size, or date; filter by status; pause/resume
 - **Push Notifications** — Pushover alerts when your queue completes
 - **Smart Skipping** — Automatically skips files already in target codec/resolution
+- **Persistent State** — Jobs survive restarts with SQLite storage
 
 ---
 
@@ -220,9 +222,14 @@ go test ./...
 | Topic | Description |
 |-------|-------------|
 | [FAQ](docs/FAQ.md) | Common questions about CPU usage, skipped files, HDR |
-| [FFmpeg Options](docs/ffmpeg-options.md) | Encoder settings and quality flags |
 | [API Reference](docs/api/) | REST API endpoints and SSE events |
-| [Architecture](docs/architecture/) | System design and package structure |
+| [Architecture](docs/architecture/) | System design, hardware acceleration, package structure |
+
+---
+
+## AI Disclosure
+
+This project was developed with AI assistance (Claude). All generated code is manually reviewed.
 
 ---
 
