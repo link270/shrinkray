@@ -27,7 +27,6 @@ Shrinkray is a user-friendly video transcoding tool designed to be simple from t
 - **Queue Management** — Sort by name, size, or date; filter by status; pause/resume
 - **Push Notifications** — Pushover alerts when your queue completes
 - **Smart Skipping** — Automatically skips files already in target codec/resolution
-- **Persistent State** — Jobs survive restarts with SQLite storage
 
 ---
 
