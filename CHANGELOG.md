@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [1.8.5] - 2026-01-22
+
+### Added
+- **Same-codec re-encoding option** (#76)
+  - New `allow_same_codec` config option (default: false)
+  - When enabled, allows HEVC→HEVC or AV1→AV1 transcoding for bitrate optimization
+  - Useful for re-encoding at different quality settings without changing codec
+  - Config-file only setting (not exposed in UI)
+
 ## [1.8.4] - 2026-01-18
 
 ### Added

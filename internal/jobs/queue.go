@@ -44,6 +44,9 @@ type Queue struct {
 	// Subscribers for job events
 	subsMu      sync.RWMutex
 	subscribers map[chan JobEvent]struct{}
+
+	// Config options
+	allowSameCodec bool // Allow transcoding files already in target codec
 }
 
 // NewQueue creates a new in-memory job queue (for testing).
@@ -80,6 +83,13 @@ func NewQueueWithStore(store Store) (*Queue, error) {
 	}
 
 	return q, nil
+}
+
+// SetAllowSameCodec enables or disables transcoding files already in target codec.
+func (q *Queue) SetAllowSameCodec(allow bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.allowSameCodec = allow
 }
 
 // persist saves a job to the store (if configured).
@@ -132,7 +142,7 @@ func (q *Queue) Add(inputPath string, presetID string, probe *ffmpeg.ProbeResult
 	// Check if file should be skipped
 	var skipReason string
 	if preset != nil {
-		skipReason = checkSkipReason(probe, preset)
+		skipReason = checkSkipReason(probe, preset, q.allowSameCodec)
 	}
 
 	status := StatusPending
@@ -200,7 +210,7 @@ func (q *Queue) AddMultiple(probes []*ffmpeg.ProbeResult, presetID string) ([]*J
 		// Check if file should be skipped
 		var skipReason string
 		if preset != nil {
-			skipReason = checkSkipReason(probe, preset)
+			skipReason = checkSkipReason(probe, preset, q.allowSameCodec)
 		}
 
 		status := StatusPending
@@ -618,7 +628,7 @@ func generateID() string {
 }
 
 // checkSkipReason returns an error message if the file should be skipped, empty string otherwise.
-func checkSkipReason(probe *ffmpeg.ProbeResult, preset *ffmpeg.Preset) string {
+func checkSkipReason(probe *ffmpeg.ProbeResult, preset *ffmpeg.Preset, allowSameCodec bool) string {
 	// For downscale presets, only check resolution (codec doesn't matter)
 	if preset.MaxHeight > 0 {
 		if probe.Height <= preset.MaxHeight {
@@ -640,7 +650,7 @@ func checkSkipReason(probe *ffmpeg.ProbeResult, preset *ffmpeg.Preset) string {
 		codecName = "AV1"
 	}
 
-	if isAlreadyTarget {
+	if isAlreadyTarget && !allowSameCodec {
 		return fmt.Sprintf("File is already encoded in %s", codecName)
 	}
 

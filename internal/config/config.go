@@ -63,6 +63,10 @@ type Config struct {
 	// Useful for users who want codec consistency across their library
 	KeepLargerFiles bool `yaml:"keep_larger_files"`
 
+	// AllowSameCodec allows transcoding files that are already in the target codec
+	// Useful for re-encoding at different bitrates or quality settings
+	AllowSameCodec bool `yaml:"allow_same_codec"`
+
 	// OutputFormat is the container format for transcoded files: "mkv" or "mp4"
 	// MKV preserves all streams; MP4 transcodes audio to AAC and strips subtitles
 	OutputFormat string `yaml:"output_format"`

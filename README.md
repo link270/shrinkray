@@ -160,6 +160,7 @@ Configuration is stored in `/config/shrinkray.yaml`. Most settings are available
 | `pushover_app_token` | *(empty)* | Pushover app token for notifications |
 | `log_level` | `info` | Logging verbosity: `debug`, `info`, `warn`, `error` |
 | `keep_larger_files` | `false` | Keep transcoded files even if larger than original |
+| `allow_same_codec` | `false` | Allow HEVC→HEVC or AV1→AV1 re-encoding (for bitrate optimization) |
 | `output_format` | `mkv` | Output container: `mkv` (preserves all streams) or `mp4` (web compatible) |
 | `tonemap_hdr` | `false` | Convert HDR content to SDR (uses CPU tonemapping) |
 | `tonemap_algorithm` | `hable` | Tonemapping algorithm: `hable`, `bt2390`, `reinhard`, `mobius` |

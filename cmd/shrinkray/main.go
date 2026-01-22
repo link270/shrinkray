@@ -146,6 +146,7 @@ func main() {
 		jobStore.Close()
 		os.Exit(1) //nolint:gocritic // store closed explicitly above
 	}
+	queue.SetAllowSameCodec(cfg.AllowSameCodec)
 
 	workerPool := jobs.NewWorkerPool(queue, cfg, browser.InvalidateCache)
 

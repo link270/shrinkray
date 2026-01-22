@@ -553,3 +553,82 @@ func TestQueueSubscription(t *testing.T) {
 
 	t.Log("Subscription working correctly")
 }
+
+func TestQueueAllowSameCodec(t *testing.T) {
+	// Initialize presets so compress-hevc preset is available
+	ffmpeg.InitPresets()
+
+	// Create a probe result that simulates an HEVC file
+	hevcProbe := &ffmpeg.ProbeResult{
+		Path:       "/media/already_hevc.mkv",
+		Size:       1000000,
+		Duration:   10 * time.Second,
+		VideoCodec: "hevc",
+		IsHEVC:     true,
+	}
+
+	// Test 1: allowSameCodec=false (default) - HEVC file should be skipped
+	t.Run("skip_when_disabled", func(t *testing.T) {
+		queue := jobs.NewQueue()
+		queue.SetAllowSameCodec(false)
+
+		job, err := queue.Add(hevcProbe.Path, "compress-hevc", hevcProbe)
+		if err != nil {
+			t.Fatalf("failed to add job: %v", err)
+		}
+
+		if job.Status != jobs.StatusSkipped {
+			t.Errorf("expected status skipped, got %s", job.Status)
+		}
+		if job.Error == "" {
+			t.Error("expected skip reason in Error field")
+		}
+	})
+
+	// Test 2: allowSameCodec=true - HEVC file should NOT be skipped
+	t.Run("allow_when_enabled", func(t *testing.T) {
+		queue := jobs.NewQueue()
+		queue.SetAllowSameCodec(true)
+
+		job, err := queue.Add(hevcProbe.Path, "compress-hevc", hevcProbe)
+		if err != nil {
+			t.Fatalf("failed to add job: %v", err)
+		}
+
+		if job.Status != jobs.StatusPending {
+			t.Errorf("expected status pending, got %s", job.Status)
+		}
+		if job.Error != "" {
+			t.Errorf("expected no error, got %s", job.Error)
+		}
+	})
+
+	// Test 3: AV1 file with compress-av1 preset
+	av1Probe := &ffmpeg.ProbeResult{
+		Path:       "/media/already_av1.mkv",
+		Size:       1000000,
+		Duration:   10 * time.Second,
+		VideoCodec: "av1",
+		IsAV1:      true,
+	}
+
+	t.Run("av1_skip_when_disabled", func(t *testing.T) {
+		queue := jobs.NewQueue()
+		queue.SetAllowSameCodec(false)
+
+		job, _ := queue.Add(av1Probe.Path, "compress-av1", av1Probe)
+		if job.Status != jobs.StatusSkipped {
+			t.Errorf("expected AV1 file to be skipped, got %s", job.Status)
+		}
+	})
+
+	t.Run("av1_allow_when_enabled", func(t *testing.T) {
+		queue := jobs.NewQueue()
+		queue.SetAllowSameCodec(true)
+
+		job, _ := queue.Add(av1Probe.Path, "compress-av1", av1Probe)
+		if job.Status != jobs.StatusPending {
+			t.Errorf("expected AV1 file to be pending, got %s", job.Status)
+		}
+	})
+}
