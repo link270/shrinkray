@@ -434,6 +434,45 @@ func (q *Queue) SkipJob(id, reason string) error {
 	return nil
 }
 
+// UpdateJobPhase updates the phase of a running SmartShrink job.
+// Broadcasts a progress event to notify UI of phase change.
+func (q *Queue) UpdateJobPhase(id string, phase Phase) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job, ok := q.jobs[id]
+	if !ok {
+		return fmt.Errorf("job not found: %s", id)
+	}
+
+	job.Phase = phase
+
+	q.persist(job)
+
+	q.broadcast(JobEvent{Type: "progress", Job: job.Copy()})
+
+	return nil
+}
+
+// UpdateJobVMAFResult stores the VMAF analysis results on a job.
+func (q *Queue) UpdateJobVMAFResult(id string, vmafScore float64, selectedCRF int, qualityMod float64) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job, ok := q.jobs[id]
+	if !ok {
+		return fmt.Errorf("job not found: %s", id)
+	}
+
+	job.VMafScore = vmafScore
+	job.SelectedCRF = selectedCRF
+	job.QualityMod = qualityMod
+
+	q.persist(job)
+
+	return nil
+}
+
 // CancelJob cancels a job
 func (q *Queue) CancelJob(id string) error {
 	q.mu.Lock()
