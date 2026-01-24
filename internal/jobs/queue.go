@@ -409,9 +409,9 @@ func (q *Queue) SkipJob(id, reason string) error {
 		return fmt.Errorf("job %s not found", id)
 	}
 
-	// Don't overwrite terminal states
-	if job.IsTerminal() {
-		return fmt.Errorf("job %s is already in terminal state %s", id, job.Status)
+	// Only running jobs can be skipped (during analysis phase)
+	if job.Status != StatusRunning {
+		return fmt.Errorf("job %s is not running (status: %s)", id, job.Status)
 	}
 
 	job.Status = StatusSkipped
@@ -445,6 +445,11 @@ func (q *Queue) UpdateJobPhase(id string, phase Phase) error {
 		return fmt.Errorf("job not found: %s", id)
 	}
 
+	// Only running jobs can have their phase updated
+	if job.Status != StatusRunning {
+		return fmt.Errorf("job %s is not running (status: %s)", id, job.Status)
+	}
+
 	job.Phase = phase
 
 	q.persist(job)
@@ -462,6 +467,11 @@ func (q *Queue) UpdateJobVMAFResult(id string, vmafScore float64, selectedCRF in
 	job, ok := q.jobs[id]
 	if !ok {
 		return fmt.Errorf("job not found: %s", id)
+	}
+
+	// Only running jobs can have VMAF results updated
+	if job.Status != StatusRunning {
+		return fmt.Errorf("job %s is not running (status: %s)", id, job.Status)
 	}
 
 	job.VMafScore = vmafScore
