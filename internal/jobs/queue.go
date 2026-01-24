@@ -398,6 +398,42 @@ func (q *Queue) FailJob(id string, errMsg string) error {
 	return nil
 }
 
+// SkipJob marks a running job as skipped with the given reason.
+// Used when SmartShrink analysis determines file cannot be improved.
+func (q *Queue) SkipJob(id, reason string) error {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+
+	job, exists := q.jobs[id]
+	if !exists {
+		return fmt.Errorf("job %s not found", id)
+	}
+
+	// Don't overwrite terminal states
+	if job.IsTerminal() {
+		return fmt.Errorf("job %s is already in terminal state %s", id, job.Status)
+	}
+
+	job.Status = StatusSkipped
+	job.SkipReason = reason
+	job.Error = reason // Also set Error for backwards compatibility with UI
+	job.CompletedAt = time.Now()
+
+	// Clear running state fields
+	job.Progress = 0
+	job.Speed = 0
+	job.ETA = ""
+	job.TempPath = ""
+	job.Phase = PhaseNone
+
+	// Use persist helper (handles nil store)
+	q.persist(job)
+
+	q.broadcast(JobEvent{Type: "skipped", Job: job.Copy()})
+
+	return nil
+}
+
 // CancelJob cancels a job
 func (q *Queue) CancelJob(id string) error {
 	q.mu.Lock()

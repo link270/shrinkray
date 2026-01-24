@@ -554,6 +554,91 @@ func TestQueueSubscription(t *testing.T) {
 	t.Log("Subscription working correctly")
 }
 
+func TestQueueSkipJob(t *testing.T) {
+	queue := jobs.NewQueue()
+
+	probe := &ffmpeg.ProbeResult{
+		Path:     "/test/video.mkv",
+		Size:     1000000,
+		Duration: 10 * time.Second,
+	}
+
+	// Add a job and start it (make it running)
+	job, err := queue.Add(probe.Path, "compress", probe)
+	if err != nil {
+		t.Fatalf("failed to add job: %v", err)
+	}
+
+	err = queue.StartJob(job.ID, "/tmp/test.tmp.mkv")
+	if err != nil {
+		t.Fatalf("failed to start job: %v", err)
+	}
+
+	// Verify it's running
+	if queue.Get(job.ID).Status != jobs.StatusRunning {
+		t.Fatalf("expected status running, got %s", queue.Get(job.ID).Status)
+	}
+
+	// Skip it
+	err = queue.SkipJob(job.ID, "Already optimized")
+	if err != nil {
+		t.Fatalf("SkipJob failed: %v", err)
+	}
+
+	// Verify state
+	got := queue.Get(job.ID)
+	if got.Status != jobs.StatusSkipped {
+		t.Errorf("expected StatusSkipped, got %s", got.Status)
+	}
+	if got.SkipReason != "Already optimized" {
+		t.Errorf("expected SkipReason 'Already optimized', got %q", got.SkipReason)
+	}
+	if got.Error != "Already optimized" {
+		t.Errorf("expected Error 'Already optimized', got %q", got.Error)
+	}
+	if got.CompletedAt.IsZero() {
+		t.Error("expected CompletedAt to be set")
+	}
+	// Verify running state fields are cleared
+	if got.Progress != 0 {
+		t.Errorf("expected Progress 0, got %f", got.Progress)
+	}
+	if got.TempPath != "" {
+		t.Errorf("expected TempPath empty, got %s", got.TempPath)
+	}
+}
+
+func TestQueueSkipJobTerminalState(t *testing.T) {
+	queue := jobs.NewQueue()
+
+	probe := &ffmpeg.ProbeResult{
+		Path:     "/test/video.mkv",
+		Size:     1000000,
+		Duration: 10 * time.Second,
+	}
+
+	// Add a job, start it, and complete it
+	job, _ := queue.Add(probe.Path, "compress", probe)
+	queue.StartJob(job.ID, "/tmp/test.tmp.mkv")
+	queue.CompleteJob(job.ID, "/test/video.mkv", 500000)
+
+	// Try to skip a completed job - should fail
+	err := queue.SkipJob(job.ID, "Already optimized")
+	if err == nil {
+		t.Error("expected error when skipping job in terminal state")
+	}
+}
+
+func TestQueueSkipJobNotFound(t *testing.T) {
+	queue := jobs.NewQueue()
+
+	// Try to skip a non-existent job
+	err := queue.SkipJob("nonexistent", "Already optimized")
+	if err == nil {
+		t.Error("expected error when skipping non-existent job")
+	}
+}
+
 func TestQueueAllowSameCodec(t *testing.T) {
 	// Initialize presets so compress-hevc preset is available
 	ffmpeg.InitPresets()
