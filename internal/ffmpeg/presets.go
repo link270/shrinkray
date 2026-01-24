@@ -3,6 +3,8 @@ package ffmpeg
 import (
 	"fmt"
 	"strings"
+
+	"github.com/gwlsn/shrinkray/internal/ffmpeg/vmaf"
 )
 
 // Preset defines a transcoding preset with its FFmpeg parameters
@@ -25,6 +27,10 @@ type encoderSettings struct {
 	hwaccelArgs []string // Args to prepend before -i for hardware decoding
 	scaleFilter string   // Hardware-specific scale filter (e.g., "scale_qsv", "scale_cuda")
 	baseFilter  string   // Filter to prepend before scale (e.g., "format=nv12,hwupload" for VAAPI)
+	qualityMin  int      // Minimum quality (best quality, lowest compression)
+	qualityMax  int      // Maximum quality (most compression)
+	modMin      float64  // Min bitrate modifier (for VideoToolbox)
+	modMax      float64  // Max bitrate modifier (for VideoToolbox)
 }
 
 // Bitrate constraints for dynamic bitrate calculation (VideoToolbox).
@@ -49,6 +55,8 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		quality:     "26",
 		extraArgs:   []string{"-preset", "medium"},
 		scaleFilter: "scale",
+		qualityMin:  18,
+		qualityMax:  35,
 	},
 	{HWAccelVideoToolbox, CodecHEVC}: {
 		// VideoToolbox uses bitrate control (-b:v) with dynamic calculation.
@@ -66,6 +74,8 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		usesBitrate: true,
 		hwaccelArgs: []string{"-hwaccel", "videotoolbox"},
 		scaleFilter: "scale", // VideoToolbox doesn't have a HW scaler, use CPU
+		modMin:      0.05,
+		modMax:      0.80,
 	},
 	{HWAccelNVENC, CodecHEVC}: {
 		encoder:     "hevc_nvenc",
@@ -75,6 +85,8 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		// hwaccelArgs generated dynamically by getHwaccelInputArgs()
 		scaleFilter: "scale_cuda",
 		baseFilter:  "scale_cuda=format=nv12", // Explicit format for compatibility
+		qualityMin:  18,
+		qualityMax:  35,
 	},
 	{HWAccelQSV, CodecHEVC}: {
 		encoder:     "hevc_qsv",
@@ -84,6 +96,8 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		// hwaccelArgs generated dynamically by getHwaccelInputArgs() - QSV derived from VAAPI on Linux
 		scaleFilter: "scale_qsv",
 		baseFilter:  "format=nv12|qsv,hwupload=extra_hw_frames=64,scale_qsv=format=nv12", // Added scale_qsv for format compatibility
+		qualityMin:  18,
+		qualityMax:  35,
 	},
 	{HWAccelVAAPI, CodecHEVC}: {
 		encoder:     "hevc_vaapi",
@@ -93,6 +107,8 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		// hwaccelArgs generated dynamically by getHwaccelInputArgs()
 		scaleFilter: "scale_vaapi",
 		baseFilter:  "format=nv12|vaapi,hwupload,scale_vaapi=format=nv12", // Added scale_vaapi for format compatibility
+		qualityMin:  18,
+		qualityMax:  35,
 	},
 
 	// AV1 encoders
@@ -103,6 +119,8 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		quality:     "35",
 		extraArgs:   []string{"-preset", "6"},
 		scaleFilter: "scale",
+		qualityMin:  20,
+		qualityMax:  45,
 	},
 	{HWAccelVideoToolbox, CodecAV1}: {
 		// VideoToolbox AV1 (M3+ chips) uses bitrate control.
@@ -118,6 +136,8 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		usesBitrate: true,
 		hwaccelArgs: []string{"-hwaccel", "videotoolbox"},
 		scaleFilter: "scale", // VideoToolbox doesn't have a HW scaler, use CPU
+		modMin:      0.05,
+		modMax:      0.70,
 	},
 	{HWAccelNVENC, CodecAV1}: {
 		encoder:     "av1_nvenc",
@@ -127,6 +147,8 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		// hwaccelArgs generated dynamically by getHwaccelInputArgs()
 		scaleFilter: "scale_cuda",
 		baseFilter:  "scale_cuda=format=nv12", // Explicit format for compatibility
+		qualityMin:  20,
+		qualityMax:  40,
 	},
 	{HWAccelQSV, CodecAV1}: {
 		encoder:     "av1_qsv",
@@ -136,6 +158,8 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		// hwaccelArgs generated dynamically by getHwaccelInputArgs() - QSV derived from VAAPI on Linux
 		scaleFilter: "scale_qsv",
 		baseFilter:  "format=nv12|qsv,hwupload=extra_hw_frames=64,scale_qsv=format=nv12", // Added scale_qsv for format compatibility
+		qualityMin:  20,
+		qualityMax:  40,
 	},
 	{HWAccelVAAPI, CodecAV1}: {
 		encoder:     "av1_vaapi",
@@ -145,6 +169,8 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 		// hwaccelArgs generated dynamically by getHwaccelInputArgs()
 		scaleFilter: "scale_vaapi",
 		baseFilter:  "format=nv12|vaapi,hwupload,scale_vaapi=format=nv12", // Added scale_vaapi for format compatibility
+		qualityMin:  20,
+		qualityMax:  40,
 	},
 }
 
@@ -176,6 +202,27 @@ func GetEncoderDefaults(encoder HWAccel) (hevcDefault, av1Default int) {
 		fmt.Sscanf(av1Config.quality, "%d", &av1Default)
 	}
 	return
+}
+
+// GetQualityRange returns the quality search range for an encoder
+func GetQualityRange(hwaccel HWAccel, codec Codec) vmaf.QualityRange {
+	key := EncoderKey{hwaccel, codec}
+	config, ok := encoderConfigs[key]
+	if !ok {
+		// Fallback defaults
+		if codec == CodecAV1 {
+			return vmaf.QualityRange{Min: 20, Max: 45}
+		}
+		return vmaf.QualityRange{Min: 18, Max: 35}
+	}
+
+	return vmaf.QualityRange{
+		Min:         config.qualityMin,
+		Max:         config.qualityMax,
+		UsesBitrate: config.usesBitrate,
+		MinMod:      config.modMin,
+		MaxMod:      config.modMax,
+	}
 }
 
 // crfToBitrateModifier converts a CRF value to a VideoToolbox bitrate modifier.
