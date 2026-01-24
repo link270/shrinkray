@@ -192,6 +192,33 @@ func Load(path string) (*Config, error) {
 		cfg.TonemapAlgorithm = "hable"
 	}
 
+	// Validate and normalize SmartShrink settings
+	switch cfg.SmartShrink.Quality {
+	case "acceptable", "good", "excellent":
+		// Valid
+	default:
+		cfg.SmartShrink.Quality = "good" // Default to good for invalid values
+	}
+
+	if cfg.SmartShrink.SampleDuration < 1 {
+		cfg.SmartShrink.SampleDuration = 5 // Default
+	}
+
+	if cfg.SmartShrink.MaxConcurrentAnalysis < 1 {
+		cfg.SmartShrink.MaxConcurrentAnalysis = 1
+	}
+
+	// Clamp VMAF thresholds to valid range (0-100)
+	if cfg.SmartShrink.VMafAcceptable < 0 || cfg.SmartShrink.VMafAcceptable > 100 {
+		cfg.SmartShrink.VMafAcceptable = 85
+	}
+	if cfg.SmartShrink.VMafGood < 0 || cfg.SmartShrink.VMafGood > 100 {
+		cfg.SmartShrink.VMafGood = 93
+	}
+	if cfg.SmartShrink.VMafExcellent < 0 || cfg.SmartShrink.VMafExcellent > 100 {
+		cfg.SmartShrink.VMafExcellent = 96
+	}
+
 	return cfg, nil
 }
 
