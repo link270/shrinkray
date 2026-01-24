@@ -46,6 +46,7 @@ func binarySearchCRF(ctx context.Context, ffmpegPath string, referenceSamples []
 
 	var bestQuality int
 	var bestScore float64
+	var found bool
 	iterations := 0
 
 	for low <= high {
@@ -81,6 +82,7 @@ func binarySearchCRF(ctx context.Context, ffmpegPath string, referenceSamples []
 			// Quality is acceptable, try more compression
 			bestQuality = mid
 			bestScore = minScore
+			found = true
 			low = mid + 1
 		} else {
 			// Quality too low, try less compression
@@ -88,7 +90,7 @@ func binarySearchCRF(ctx context.Context, ffmpegPath string, referenceSamples []
 		}
 	}
 
-	if bestQuality == 0 {
+	if !found {
 		// No acceptable quality found
 		return nil, nil
 	}
@@ -109,10 +111,11 @@ func binarySearchBitrate(ctx context.Context, ffmpegPath string, referenceSample
 
 	var bestModifier float64
 	var bestScore float64
+	var found bool
 	iterations := 0
 
-	// Binary search with float precision
-	for high-low > 0.02 { // 2% precision
+	// Binary search with float precision (ensure at least one iteration)
+	for high-low > 0.02 || !found {
 		iterations++
 		mid := (low + high) / 2
 
@@ -145,14 +148,20 @@ func binarySearchBitrate(ctx context.Context, ffmpegPath string, referenceSample
 			// Quality is acceptable, try more compression (lower modifier)
 			bestModifier = mid
 			bestScore = minScore
+			found = true
 			high = mid
 		} else {
 			// Quality too low, try less compression (higher modifier)
 			low = mid
 		}
+
+		// Break after first iteration if range is already narrow
+		if high-low <= 0.02 {
+			break
+		}
 	}
 
-	if bestModifier == 0 {
+	if !found {
 		return nil, nil
 	}
 

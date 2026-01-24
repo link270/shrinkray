@@ -81,6 +81,9 @@ func (a *Analyzer) Analyze(ctx context.Context, inputPath string, videoDuration 
 		}, nil
 	}
 
+	// Track samples used for final result
+	samplesUsed := len(positions)
+
 	// Check if we should expand from fast analysis to full
 	if a.FastAnalysis && len(positions) == 1 {
 		// If score is within 5 points of threshold, do full analysis
@@ -109,6 +112,9 @@ func (a *Analyzer) Analyze(ctx context.Context, inputPath string, videoDuration 
 					SkipReason: "Already optimized",
 				}, nil
 			}
+
+			// Update samples used to reflect full analysis
+			samplesUsed = len(fullPositions)
 		}
 	}
 
@@ -116,6 +122,6 @@ func (a *Analyzer) Analyze(ctx context.Context, inputPath string, videoDuration 
 		OptimalCRF:  result.Quality,
 		QualityMod:  result.Modifier,
 		VMafScore:   result.VMafScore,
-		SamplesUsed: len(positions),
+		SamplesUsed: samplesUsed,
 	}, nil
 }
