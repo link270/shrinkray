@@ -735,3 +735,101 @@ func TestSQLiteStore_WALMode(t *testing.T) {
 		t.Errorf("expected WAL mode, got %s", mode)
 	}
 }
+
+func TestSaveJobSmartShrinkFields(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	store, err := NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	job := &jobs.Job{
+		ID:          "test-smartshrink",
+		InputPath:   "/test/video.mkv",
+		PresetID:    "smartshrink-hevc",
+		Encoder:     "libx265",
+		Status:      jobs.StatusComplete,
+		Phase:       jobs.PhaseEncoding,
+		VMafScore:   94.5,
+		SelectedCRF: 26,
+		QualityMod:  0.35,
+		SkipReason:  "",
+		CreatedAt:   time.Now(),
+	}
+
+	err = store.SaveJob(job)
+	if err != nil {
+		t.Fatalf("SaveJob failed: %v", err)
+	}
+
+	loaded, _, err := store.GetAllJobs()
+	if err != nil {
+		t.Fatalf("GetAllJobs failed: %v", err)
+	}
+
+	if len(loaded) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(loaded))
+	}
+
+	if loaded[0].Phase != jobs.PhaseEncoding {
+		t.Errorf("Phase mismatch: got %q, want %q", loaded[0].Phase, jobs.PhaseEncoding)
+	}
+	if loaded[0].VMafScore != 94.5 {
+		t.Errorf("VMafScore mismatch: got %f, want 94.5", loaded[0].VMafScore)
+	}
+	if loaded[0].SelectedCRF != 26 {
+		t.Errorf("SelectedCRF mismatch: got %d, want 26", loaded[0].SelectedCRF)
+	}
+	if loaded[0].QualityMod != 0.35 {
+		t.Errorf("QualityMod mismatch: got %f, want 0.35", loaded[0].QualityMod)
+	}
+	if loaded[0].SkipReason != "" {
+		t.Errorf("SkipReason mismatch: got %q, want empty string", loaded[0].SkipReason)
+	}
+}
+
+func TestSaveJobSmartShrinkFieldsWithSkipReason(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	store, err := NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	job := &jobs.Job{
+		ID:          "test-smartshrink-skip",
+		InputPath:   "/test/video.mkv",
+		PresetID:    "smartshrink-hevc",
+		Encoder:     "libx265",
+		Status:      jobs.StatusSkipped,
+		Phase:       jobs.PhaseAnalyzing,
+		VMafScore:   0,
+		SelectedCRF: 0,
+		QualityMod:  0,
+		SkipReason:  "no CRF meets VMAF target",
+		CreatedAt:   time.Now(),
+	}
+
+	err = store.SaveJob(job)
+	if err != nil {
+		t.Fatalf("SaveJob failed: %v", err)
+	}
+
+	// Test via GetJob (single job retrieval)
+	loaded, err := store.GetJob(job.ID)
+	if err != nil {
+		t.Fatalf("GetJob failed: %v", err)
+	}
+
+	if loaded.Phase != jobs.PhaseAnalyzing {
+		t.Errorf("Phase mismatch: got %q, want %q", loaded.Phase, jobs.PhaseAnalyzing)
+	}
+	if loaded.SkipReason != "no CRF meets VMAF target" {
+		t.Errorf("SkipReason mismatch: got %q, want %q", loaded.SkipReason, "no CRF meets VMAF target")
+	}
+}
