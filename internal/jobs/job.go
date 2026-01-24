@@ -16,6 +16,15 @@ const (
 	StatusSkipped   Status = "skipped"
 )
 
+// Phase represents the current phase of a SmartShrink job
+type Phase string
+
+const (
+	PhaseNone      Phase = ""          // Regular presets or not yet started
+	PhaseAnalyzing Phase = "analyzing" // SmartShrink: sample extraction + binary search
+	PhaseEncoding  Phase = "encoding"  // SmartShrink: full transcode
+)
+
 // Job represents a transcoding job
 type Job struct {
 	ID          string    `json:"id"`
@@ -43,6 +52,11 @@ type Job struct {
 	BitDepth    int       `json:"bit_depth,omitempty"`    // Color depth (8, 10, 12)
 	IsHDR       bool      `json:"is_hdr,omitempty"`       // True if source is HDR (HDR10, HLG, etc.)
 	TranscodeTime int64   `json:"transcode_secs,omitempty"` // Time to transcode in seconds
+	Phase       Phase   `json:"phase,omitempty"`         // Current phase for SmartShrink jobs
+	VMafScore   float64 `json:"vmaf_score,omitempty"`    // Final VMAF score achieved
+	SelectedCRF int     `json:"selected_crf,omitempty"`  // CRF/CQ/QP chosen by analysis
+	QualityMod  float64 `json:"quality_mod,omitempty"`   // Bitrate modifier for VideoToolbox (0.0-1.0)
+	SkipReason  string  `json:"skip_reason,omitempty"`   // Reason for skip status
 	CreatedAt   time.Time `json:"created_at"`
 	StartedAt   time.Time `json:"started_at,omitempty"`
 	CompletedAt time.Time `json:"completed_at,omitempty"`
