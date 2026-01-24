@@ -546,6 +546,8 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, sourceWidth, sourceHei
 
 // BuildSampleEncodeArgs builds FFmpeg arguments for encoding a sample.
 // Similar to BuildPresetArgs but video-only (no audio/subtitles).
+// For VideoToolbox (bitrate-based encoders), modifierOverride sets the bitrate
+// as a fraction of a reference bitrate (e.g., 0.35 = 35% of 10Mbps = 3.5Mbps).
 func BuildSampleEncodeArgs(preset *Preset, sourceWidth, sourceHeight int,
 	qualityOverride int, modifierOverride float64, softwareDecode bool,
 	tonemap *TonemapParams) (inputArgs []string, outputArgs []string) {
@@ -574,6 +576,35 @@ func BuildSampleEncodeArgs(preset *Preset, sourceWidth, sourceHeight int,
 			continue
 		}
 		filteredArgs = append(filteredArgs, arg)
+	}
+
+	// For bitrate-based encoders (VideoToolbox), handle modifierOverride
+	// Since we passed sourceBitrate=0 to BuildPresetArgs, bitrate calculation was skipped.
+	// When modifierOverride > 0, calculate bitrate based on a reference rate.
+	if modifierOverride > 0 {
+		key := EncoderKey{preset.Encoder, preset.Codec}
+		if config, ok := encoderConfigs[key]; ok && config.usesBitrate {
+			// Use a reference bitrate of 10Mbps for sample encoding
+			// This gives reasonable quality for VMAF comparison
+			const referenceBitrateKbps = 10000
+			targetKbps := int64(float64(referenceBitrateKbps) * modifierOverride)
+
+			// Apply min/max constraints
+			if targetKbps < minBitrateKbps {
+				targetKbps = minBitrateKbps
+			}
+			if targetKbps > maxBitrateKbps {
+				targetKbps = maxBitrateKbps
+			}
+
+			// Replace the -b:v value in filteredArgs
+			for i, arg := range filteredArgs {
+				if arg == "-b:v" && i+1 < len(filteredArgs) {
+					filteredArgs[i+1] = fmt.Sprintf("%dk", targetKbps)
+					break
+				}
+			}
+		}
 	}
 
 	// Add explicit no audio/subtitles

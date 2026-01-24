@@ -722,6 +722,11 @@ func checkSkipReason(probe *ffmpeg.ProbeResult, preset *ffmpeg.Preset, allowSame
 		return "" // Needs downscaling, proceed regardless of codec
 	}
 
+	// SmartShrink presets skip the same-codec check (VMAF analysis will determine if skip is needed)
+	if preset.SkipsCodecCheck {
+		return "" // Proceed to VMAF analysis
+	}
+
 	// For compression presets (no downscaling), check codec
 	var isAlreadyTarget bool
 	var codecName string

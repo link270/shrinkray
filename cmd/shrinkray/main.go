@@ -121,15 +121,17 @@ func main() {
 
 	// Detect available hardware encoders
 	ffmpeg.DetectEncoders(cfg.FFmpegPath)
-	ffmpeg.InitPresets()
 
-	// Detect VMAF availability (must be after FFmpeg path is known)
+	// Detect VMAF availability (must be BEFORE preset init for SmartShrink presets)
 	vmaf.DetectVMAF(cfg.FFmpegPath)
 	if vmaf.IsAvailable() {
 		logger.Info("VMAF support detected", "models", vmaf.GetModels())
 	} else {
 		logger.Info("VMAF not available - SmartShrink presets will be hidden")
 	}
+
+	// Initialize presets (depends on encoder AND VMAF detection)
+	ffmpeg.InitPresets()
 
 	// Display detected encoders
 	fmt.Println("  Encoders:")
