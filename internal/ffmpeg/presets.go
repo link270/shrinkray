@@ -544,6 +544,44 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, sourceWidth, sourceHei
 	return inputArgs, outputArgs
 }
 
+// BuildSampleEncodeArgs builds FFmpeg arguments for encoding a sample.
+// Similar to BuildPresetArgs but video-only (no audio/subtitles).
+func BuildSampleEncodeArgs(preset *Preset, sourceWidth, sourceHeight int,
+	qualityOverride int, modifierOverride float64, softwareDecode bool,
+	tonemap *TonemapParams) (inputArgs []string, outputArgs []string) {
+
+	// Get base args from BuildPresetArgs
+	inputArgs, outputArgs = BuildPresetArgs(preset, 0, sourceWidth, sourceHeight,
+		qualityOverride, qualityOverride, softwareDecode, "mkv", tonemap)
+
+	// Remove audio/subtitle mapping and replace with video-only
+	filteredArgs := make([]string, 0, len(outputArgs))
+	skipNext := false
+	for i, arg := range outputArgs {
+		if skipNext {
+			skipNext = false
+			continue
+		}
+		// Skip audio/subtitle related args
+		if arg == "-map" {
+			if i+1 < len(outputArgs) && (strings.Contains(outputArgs[i+1], ":a") || strings.Contains(outputArgs[i+1], ":s")) {
+				skipNext = true
+				continue
+			}
+		}
+		if arg == "-c:a" || arg == "-c:s" || arg == "-b:a" || arg == "-ac" || arg == "-sn" {
+			skipNext = true
+			continue
+		}
+		filteredArgs = append(filteredArgs, arg)
+	}
+
+	// Add explicit no audio/subtitles
+	filteredArgs = append(filteredArgs, "-an", "-sn")
+
+	return inputArgs, filteredArgs
+}
+
 // GeneratePresets creates presets using the best available encoder for each codec
 func GeneratePresets() map[string]*Preset {
 	presets := make(map[string]*Preset)
