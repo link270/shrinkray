@@ -1837,6 +1837,19 @@
                             </select>
                         </div>
                     </div>
+                    <div class="setting-item">
+                        <div class="setting-info">
+                            <div class="setting-name">SmartShrink Quality</div>
+                            <div class="setting-desc">Quality target for auto-compression</div>
+                        </div>
+                        <div class="setting-control">
+                            <select class="setting-select" id="setting-smartshrink-quality" onchange="updateSetting('smartshrink_quality', this.value)">
+                                <option value="acceptable">Acceptable (VMAF 85+)</option>
+                                <option value="good">Good (VMAF 93+)</option>
+                                <option value="excellent">Excellent (VMAF 96+)</option>
+                            </select>
+                        </div>
+                    </div>
                 </div>
                 <div class="setting-group">
                     <div class="setting-group-title">Schedule</div>
@@ -3293,6 +3306,7 @@
 
                 document.getElementById('setting-original-handling').value = config.original_handling || 'replace';
                 document.getElementById('setting-workers').value = config.workers || 1;
+                document.getElementById('setting-smartshrink-quality').value = config.smartshrink_quality || 'good';
 
                 // Pushover settings
                 document.getElementById('setting-pushover-user').value = config.pushover_user_key || '';
