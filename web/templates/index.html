@@ -2638,8 +2638,8 @@
             const wasAnalyzing = job && job.phase === 'analyzing';
             const isAnalyzing = phase === 'analyzing';
 
-            // If phase changed from analyzing to encoding, do a full re-render
-            if (wasAnalyzing && !isAnalyzing) {
+            // If phase changed (entering or leaving analyzing), do a full re-render
+            if (wasAnalyzing !== isAnalyzing) {
                 if (job) {
                     job.progress = progress;
                     job.speed = speed;
@@ -2652,9 +2652,8 @@
                 return;
             }
 
-            // If analyzing, don't update progress - just keep the analyzing state
+            // If analyzing, don't update progress further - keep the analyzing state
             if (isAnalyzing) {
-                if (job) job.phase = phase;
                 return;
             }
 
@@ -3385,6 +3384,8 @@
                         el.remove();
                         displayedJobCount--;
                     }
+                    // Clean up expanded details state
+                    expandedJobDetails.delete(data.job.id);
                     scheduleStatsRefresh();
                 }
                 // No catch-all scheduleRefresh() - only refresh when truly needed
