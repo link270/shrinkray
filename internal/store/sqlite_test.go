@@ -936,3 +936,65 @@ func TestMigrationV4ToV5(t *testing.T) {
 		t.Errorf("Expected empty skip_reason, got %q", allJobs[0].SkipReason)
 	}
 }
+
+func TestSaveJobColorTransferAndSmartShrinkQuality(t *testing.T) {
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	store, err := NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatalf("failed to create store: %v", err)
+	}
+	defer store.Close()
+
+	job := &jobs.Job{
+		ID:                  "test-hdr-smartshrink",
+		InputPath:           "/test/hdr_video.mkv",
+		PresetID:            "smartshrink-hevc",
+		Encoder:             "hevc_qsv",
+		Status:              jobs.StatusComplete,
+		Phase:               jobs.PhaseEncoding,
+		IsHDR:               true,
+		ColorTransfer:       "smpte2084",
+		SmartShrinkQuality:  "excellent",
+		VMafScore:           96.5,
+		SelectedCRF:         22,
+		CreatedAt:           time.Now(),
+	}
+
+	err = store.SaveJob(job)
+	if err != nil {
+		t.Fatalf("SaveJob failed: %v", err)
+	}
+
+	// Test via GetJob
+	loaded, err := store.GetJob(job.ID)
+	if err != nil {
+		t.Fatalf("GetJob failed: %v", err)
+	}
+
+	if loaded.ColorTransfer != "smpte2084" {
+		t.Errorf("ColorTransfer mismatch: got %q, want %q", loaded.ColorTransfer, "smpte2084")
+	}
+	if loaded.SmartShrinkQuality != "excellent" {
+		t.Errorf("SmartShrinkQuality mismatch: got %q, want %q", loaded.SmartShrinkQuality, "excellent")
+	}
+	if !loaded.IsHDR {
+		t.Errorf("IsHDR mismatch: got %v, want true", loaded.IsHDR)
+	}
+
+	// Test via GetAllJobs
+	allJobs, _, err := store.GetAllJobs()
+	if err != nil {
+		t.Fatalf("GetAllJobs failed: %v", err)
+	}
+	if len(allJobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(allJobs))
+	}
+	if allJobs[0].ColorTransfer != "smpte2084" {
+		t.Errorf("ColorTransfer via GetAllJobs mismatch: got %q, want %q", allJobs[0].ColorTransfer, "smpte2084")
+	}
+	if allJobs[0].SmartShrinkQuality != "excellent" {
+		t.Errorf("SmartShrinkQuality via GetAllJobs mismatch: got %q, want %q", allJobs[0].SmartShrinkQuality, "excellent")
+	}
+}
