@@ -59,10 +59,29 @@ type WorkerPool struct {
 	analysisSem chan struct{} // Limits concurrent VMAF analysis
 }
 
+// SmartShrink quality thresholds (hardcoded for simplicity)
+const (
+	vmafAcceptable = 85.0
+	vmafGood       = 93.0
+	vmafExcellent  = 96.0
+)
+
+// getSmartShrinkThreshold returns the VMAF threshold for a quality tier
+func getSmartShrinkThreshold(quality string) float64 {
+	switch quality {
+	case "acceptable":
+		return vmafAcceptable
+	case "excellent":
+		return vmafExcellent
+	default:
+		return vmafGood
+	}
+}
+
 // NewWorkerPool creates a new worker pool
 func NewWorkerPool(queue *Queue, cfg *config.Config, invalidateCache CacheInvalidator) *WorkerPool {
 	ctx, cancel := context.WithCancel(context.Background())
-	analysisSem := make(chan struct{}, cfg.SmartShrink.MaxConcurrentAnalysis)
+	analysisSem := make(chan struct{}, 1) // Only 1 concurrent VMAF analysis
 
 	pool := &WorkerPool{
 		workers:         make([]*Worker, 0, cfg.Workers),
@@ -715,34 +734,20 @@ func (wp *WorkerPool) runSmartShrinkAnalysis(ctx context.Context, job *Job, pres
 	// Get temp directory for analysis
 	tempDir := wp.cfg.GetTempDir(job.InputPath)
 
+	// Get threshold from job's quality tier
+	threshold := getSmartShrinkThreshold(job.SmartShrinkQuality)
+
 	// Create analyzer
-	analyzer := vmaf.NewAnalyzer(
-		wp.cfg.FFmpegPath,
-		tempDir,
-		wp.cfg.SmartShrink.SampleDuration,
-		wp.cfg.SmartShrink.FastAnalysis,
-		wp.cfg.SmartShrink.GetVMAFThreshold(),
-	)
+	analyzer := vmaf.NewAnalyzer(wp.cfg.FFmpegPath, tempDir)
 
 	// Set up tonemapping for HDR content with tonemapping enabled.
-	// When tonemapping is enabled, we tonemap the reference samples during extraction
-	// so they are SDR. The encode callback then receives SDR samples, so it should NOT
-	// apply tonemapping again (would cause double-tonemapping artifacts).
-	var encodeTonemapParams *ffmpeg.TonemapParams // nil = no tonemapping in encode callback
+	var encodeTonemapParams *ffmpeg.TonemapParams
 	if job.IsHDR && wp.cfg.TonemapHDR {
-		// Tonemap reference samples during extraction (analyzer handles this)
 		analyzer.WithTonemap(true, wp.cfg.TonemapAlgorithm)
-		// Encode callback receives SDR samples - no tonemapping needed
-		// encodeTonemapParams stays nil
 	}
 
 	// Create encode callback
 	encodeSample := func(ctx context.Context, samplePath string, quality int, modifier float64) (string, error) {
-		// Build FFmpeg args for sample encode
-		// Note: Always use software decode for sample encoding since FFV1 reference
-		// samples are CPU-decoded. HW encoders will still be used if preset specifies them.
-		// Note: When HDR tonemapping is enabled, reference samples are pre-tonemapped to SDR,
-		// so encodeTonemapParams is nil to avoid double-tonemapping.
 		inputArgs, outputArgs := ffmpeg.BuildSampleEncodeArgs(
 			preset, job.Width, job.Height,
 			quality, modifier,
@@ -766,8 +771,8 @@ func (wp *WorkerPool) runSmartShrinkAnalysis(ctx context.Context, job *Job, pres
 		return outputPath, nil
 	}
 
-	// Run analysis
-	result, err := analyzer.Analyze(ctx, job.InputPath, duration, job.Height, qRange, encodeSample)
+	// Run analysis with threshold
+	result, err := analyzer.Analyze(ctx, job.InputPath, duration, job.Height, qRange, threshold, encodeSample)
 	if err != nil {
 		return false, "", 0, 0, 0, fmt.Errorf("VMAF analysis failed: %w", err)
 	}

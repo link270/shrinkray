@@ -8,29 +8,6 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// SmartShrinkConfig holds settings for VMAF-based auto compression
-type SmartShrinkConfig struct {
-	Quality               string  `yaml:"quality"`                 // acceptable, good, excellent
-	SampleDuration        int     `yaml:"sample_duration"`         // seconds
-	FastAnalysis          bool    `yaml:"fast_analysis"`           // single sample first
-	MaxConcurrentAnalysis int     `yaml:"max_concurrent_analysis"` // analysis concurrency limit
-	VMafAcceptable        float64 `yaml:"vmaf_acceptable"`         // threshold override
-	VMafGood              float64 `yaml:"vmaf_good"`               // threshold override
-	VMafExcellent         float64 `yaml:"vmaf_excellent"`          // threshold override
-}
-
-// GetVMAFThreshold returns the VMAF threshold for the current quality setting
-func (c *SmartShrinkConfig) GetVMAFThreshold() float64 {
-	switch c.Quality {
-	case "acceptable":
-		return c.VMafAcceptable
-	case "excellent":
-		return c.VMafExcellent
-	default:
-		return c.VMafGood
-	}
-}
-
 type Config struct {
 	// MediaPath is the root directory to browse for media files
 	MediaPath string `yaml:"media_path"`
@@ -102,9 +79,6 @@ type Config struct {
 	// TonemapAlgorithm is the tonemapping algorithm to use: "hable", "bt2390", "reinhard"
 	// Default is "hable" (filmic, good for movies)
 	TonemapAlgorithm string `yaml:"tonemap_algorithm"`
-
-	// SmartShrink holds settings for VMAF-based auto compression
-	SmartShrink SmartShrinkConfig `yaml:"smartshrink"`
 }
 
 // DefaultConfig returns a config with sensible defaults
@@ -126,15 +100,6 @@ func DefaultConfig() *Config {
 		OutputFormat:      "mkv",
 		TonemapHDR:        false,   // HDR passthrough by default; enable for SDR conversion (uses CPU)
 		TonemapAlgorithm:  "hable", // Filmic tonemapping, good for movies
-		SmartShrink: SmartShrinkConfig{
-			Quality:               "good",
-			SampleDuration:        5,
-			FastAnalysis:          true,
-			MaxConcurrentAnalysis: 1,
-			VMafAcceptable:        85,
-			VMafGood:              93,
-			VMafExcellent:         96,
-		},
 	}
 }
 
@@ -190,33 +155,6 @@ func Load(path string) (*Config, error) {
 	default:
 		// Unknown algorithm - fall back to hable
 		cfg.TonemapAlgorithm = "hable"
-	}
-
-	// Validate and normalize SmartShrink settings
-	switch cfg.SmartShrink.Quality {
-	case "acceptable", "good", "excellent":
-		// Valid
-	default:
-		cfg.SmartShrink.Quality = "good" // Default to good for invalid values
-	}
-
-	if cfg.SmartShrink.SampleDuration < 1 {
-		cfg.SmartShrink.SampleDuration = 5 // Default
-	}
-
-	if cfg.SmartShrink.MaxConcurrentAnalysis < 1 {
-		cfg.SmartShrink.MaxConcurrentAnalysis = 1
-	}
-
-	// Clamp VMAF thresholds to valid range (0-100)
-	if cfg.SmartShrink.VMafAcceptable < 0 || cfg.SmartShrink.VMafAcceptable > 100 {
-		cfg.SmartShrink.VMafAcceptable = 85
-	}
-	if cfg.SmartShrink.VMafGood < 0 || cfg.SmartShrink.VMafGood > 100 {
-		cfg.SmartShrink.VMafGood = 93
-	}
-	if cfg.SmartShrink.VMafExcellent < 0 || cfg.SmartShrink.VMafExcellent > 100 {
-		cfg.SmartShrink.VMafExcellent = 96
 	}
 
 	return cfg, nil
