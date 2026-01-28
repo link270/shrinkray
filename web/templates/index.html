@@ -1760,6 +1760,11 @@
                         <select class="preset-select" id="preset-select" onchange="onPresetChange()">
                             <option value="compress-hevc">Compress (HEVC)</option>
                         </select>
+                        <select class="preset-select" id="smartshrink-quality" style="display: none;">
+                            <option value="good">Good (VMAF 93+)</option>
+                            <option value="acceptable">Acceptable (VMAF 85+)</option>
+                            <option value="excellent">Excellent (VMAF 96+)</option>
+                        </select>
                         <button class="btn btn-primary" onclick="startJobs()" id="start-btn" disabled>Start Transcode</button>
                         <span class="selection-count" id="selection-summary"></span>
                         <span class="schedule-status" id="schedule-status"></span>
@@ -1888,19 +1893,6 @@
                                 <option value="4">4</option>
                                 <option value="5">5</option>
                                 <option value="6">6</option>
-                            </select>
-                        </div>
-                    </div>
-                    <div class="setting-item">
-                        <div class="setting-info">
-                            <div class="setting-name">SmartShrink Quality</div>
-                            <div class="setting-desc">Quality target for auto-compression</div>
-                        </div>
-                        <div class="setting-control">
-                            <select class="setting-select" id="setting-smartshrink-quality" onchange="updateSetting('smartshrink_quality', this.value)">
-                                <option value="acceptable">Acceptable (VMAF 85+)</option>
-                                <option value="good">Good (VMAF 93+)</option>
-                                <option value="excellent">Excellent (VMAF 96+)</option>
                             </select>
                         </div>
                     </div>
@@ -2352,7 +2344,14 @@
         }
 
         function onPresetChange() {
-            // Preset changed - no action needed since estimation is removed
+            const preset = document.getElementById('preset-select').value;
+            const qualityDropdown = document.getElementById('smartshrink-quality');
+            // Show quality dropdown for SmartShrink presets
+            if (preset.startsWith('smartshrink-')) {
+                qualityDropdown.style.display = 'inline-block';
+            } else {
+                qualityDropdown.style.display = 'none';
+            }
         }
 
         async function startJobs() {
@@ -2361,6 +2360,9 @@
             const banner = document.getElementById('processing-banner');
             try {
                 const preset = document.getElementById('preset-select').value;
+                const qualityDropdown = document.getElementById('smartshrink-quality');
+                const smartshrinkQuality = preset.startsWith('smartshrink-') ? qualityDropdown.value : '';
+
                 // Sum up total files: for folders use their file_count, for files use 1
                 let totalFiles = 0;
                 for (const count of selectedFileCounts.values()) {
@@ -2378,7 +2380,8 @@
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         paths: Array.from(selectedPaths),
-                        preset_id: preset
+                        preset_id: preset,
+                        smartshrink_quality: smartshrinkQuality
                     })
                 });
                 const data = await resp.json();
@@ -2607,8 +2610,9 @@
                             <span class="toggle-icon">${expandedJobDetails.has(job.id) ? '▼' : '▶'}</span> SmartShrink Details
                         </div>
                         <div class="smartshrink-details" id="smartshrink-details-${job.id}" style="display: ${expandedJobDetails.has(job.id) ? 'block' : 'none'};">
+                            ${job.smartshrink_quality ? `<div class="smartshrink-detail"><span class="smartshrink-label">Quality Tier:</span> <span class="smartshrink-value">${job.smartshrink_quality}</span></div>` : ''}
                             <div class="smartshrink-detail"><span class="smartshrink-label">VMAF Score:</span> <span class="smartshrink-value">${job.vmaf_score.toFixed(1)}</span></div>
-                            ${job.selected_crf > 0 ? `<div class="smartshrink-detail"><span class="smartshrink-label">Quality:</span> <span class="smartshrink-value">CRF ${job.selected_crf}</span></div>` : ''}
+                            ${job.selected_crf > 0 ? `<div class="smartshrink-detail"><span class="smartshrink-label">CRF:</span> <span class="smartshrink-value">${job.selected_crf}</span></div>` : ''}
                             ${job.quality_mod > 0 ? `<div class="smartshrink-detail"><span class="smartshrink-label">Bitrate:</span> <span class="smartshrink-value">${(job.quality_mod * 100).toFixed(0)}%</span></div>` : ''}
                         </div>
                     ` : ''}
@@ -3418,7 +3422,6 @@
 
                 document.getElementById('setting-original-handling').value = config.original_handling || 'replace';
                 document.getElementById('setting-workers').value = config.workers || 1;
-                document.getElementById('setting-smartshrink-quality').value = config.smartshrink_quality || 'good';
 
                 // Pushover settings
                 document.getElementById('setting-pushover-user').value = config.pushover_user_key || '';
