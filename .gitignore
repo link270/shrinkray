@@ -30,10 +30,11 @@ queue.json
 config/shrinkray.yaml
 config/*.db*
 
-# Test data (videos) - ignore video files but keep scripts
-testdata/*
-!testdata/.gitkeep
-!testdata/*.sh
+# Test data
+testdata/
+
+# Integration tests (requires Docker environment)
+test/integration/
 
 # Logs
 *.log
