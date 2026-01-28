@@ -133,8 +133,9 @@ func (h *Handler) Encoders(w http.ResponseWriter, r *http.Request) {
 
 // CreateJobsRequest is the request body for creating jobs
 type CreateJobsRequest struct {
-	Paths    []string `json:"paths"`
-	PresetID string   `json:"preset_id"`
+	Paths              []string `json:"paths"`
+	PresetID           string   `json:"preset_id"`
+	SmartShrinkQuality string   `json:"smartshrink_quality,omitempty"`
 }
 
 // CreateJobs handles POST /api/jobs
@@ -155,6 +156,18 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 	if preset == nil {
 		writeError(w, http.StatusBadRequest, fmt.Sprintf("unknown preset: %s", req.PresetID))
 		return
+	}
+
+	// Validate SmartShrink quality if provided
+	smartShrinkQuality := req.SmartShrinkQuality
+	if smartShrinkQuality != "" {
+		switch smartShrinkQuality {
+		case "acceptable", "good", "excellent":
+			// Valid
+		default:
+			writeError(w, http.StatusBadRequest, "smartshrink_quality must be 'acceptable', 'good', or 'excellent'")
+			return
+		}
 	}
 
 	// Respond immediately - jobs will be added in background and appear via SSE
@@ -195,7 +208,7 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// Add jobs to queue - SSE will notify frontend of new jobs
-		_, _ = h.queue.AddMultiple(probes, req.PresetID)
+		_, _ = h.queue.AddMultiple(probes, req.PresetID, smartShrinkQuality)
 	}()
 }
 
@@ -323,7 +336,6 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		"output_format":         h.cfg.OutputFormat,
 		"tonemap_hdr":           h.cfg.TonemapHDR,
 		"tonemap_algorithm":     h.cfg.TonemapAlgorithm,
-		"smartshrink_quality":   h.cfg.SmartShrink.Quality,
 	})
 }
 
@@ -339,10 +351,9 @@ type UpdateConfigRequest struct {
 	ScheduleEnabled    *bool   `json:"schedule_enabled,omitempty"`
 	ScheduleStartHour  *int    `json:"schedule_start_hour,omitempty"`
 	ScheduleEndHour    *int    `json:"schedule_end_hour,omitempty"`
-	OutputFormat       *string `json:"output_format,omitempty"`
-	TonemapHDR         *bool   `json:"tonemap_hdr,omitempty"`
-	TonemapAlgorithm   *string `json:"tonemap_algorithm,omitempty"`
-	SmartShrinkQuality *string `json:"smartshrink_quality,omitempty"`
+	OutputFormat     *string `json:"output_format,omitempty"`
+	TonemapHDR       *bool   `json:"tonemap_hdr,omitempty"`
+	TonemapAlgorithm *string `json:"tonemap_algorithm,omitempty"`
 }
 
 // UpdateConfig handles PUT /api/config
@@ -443,17 +454,6 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Handle SmartShrink settings
-	if req.SmartShrinkQuality != nil {
-		switch *req.SmartShrinkQuality {
-		case "acceptable", "good", "excellent":
-			h.cfg.SmartShrink.Quality = *req.SmartShrinkQuality
-		default:
-			writeError(w, http.StatusBadRequest, "smartshrink_quality must be one of: acceptable, good, excellent")
-			return
-		}
-	}
-
 	// Persist config to disk
 	if h.cfgPath != "" {
 		if err := h.cfg.Save(h.cfgPath); err != nil {
@@ -536,8 +536,8 @@ func (h *Handler) RetryJob(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Add new job with same preset
-	newJob, err := h.queue.Add(job.InputPath, job.PresetID, probe)
+	// Add new job with same preset and quality tier
+	newJob, err := h.queue.Add(job.InputPath, job.PresetID, probe, job.SmartShrinkQuality)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("failed to create job: %v", err))
 		return
