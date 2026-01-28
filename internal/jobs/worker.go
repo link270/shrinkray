@@ -56,7 +56,10 @@ type WorkerPool struct {
 	paused   bool
 	pausedMu sync.RWMutex
 
-	analysisSem chan struct{} // Limits concurrent VMAF analysis
+	// Dynamic semaphore for VMAF analysis - matches worker count
+	analysisMu    sync.Mutex
+	analysisCount int // Currently running analyses
+	analysisLimit int // Max concurrent analyses (= worker count)
 }
 
 // SmartShrink quality thresholds (hardcoded for simplicity)
@@ -81,7 +84,12 @@ func getSmartShrinkThreshold(quality string) float64 {
 // NewWorkerPool creates a new worker pool
 func NewWorkerPool(queue *Queue, cfg *config.Config, invalidateCache CacheInvalidator) *WorkerPool {
 	ctx, cancel := context.WithCancel(context.Background())
-	analysisSem := make(chan struct{}, 1) // Only 1 concurrent VMAF analysis
+
+	// Ensure analysis limit is at least 1 to prevent infinite wait
+	analysisLimit := cfg.Workers
+	if analysisLimit < 1 {
+		analysisLimit = 1
+	}
 
 	pool := &WorkerPool{
 		workers:         make([]*Worker, 0, cfg.Workers),
@@ -91,7 +99,7 @@ func NewWorkerPool(queue *Queue, cfg *config.Config, invalidateCache CacheInvali
 		nextWorkerID:    0,
 		ctx:             ctx,
 		cancel:          cancel,
-		analysisSem:     analysisSem,
+		analysisLimit:   analysisLimit, // Allow concurrent analysis matching worker count
 	}
 
 	// Create workers
@@ -245,6 +253,11 @@ func (p *WorkerPool) Resize(n int) {
 
 	// Update config
 	p.cfg.Workers = n
+
+	// Update analysis limit (waiting workers will see new limit on next poll)
+	p.analysisMu.Lock()
+	p.analysisLimit = n
+	p.analysisMu.Unlock()
 }
 
 // WorkerCount returns the current number of workers
@@ -700,13 +713,30 @@ func shouldRetryWithSoftwareDecode(encoder ffmpeg.HWAccel) bool {
 // runSmartShrinkAnalysis performs VMAF analysis and returns the optimal quality settings.
 // Returns (shouldSkip, skipReason, selectedCRF, qualityMod, vmafScore, error)
 func (wp *WorkerPool) runSmartShrinkAnalysis(ctx context.Context, job *Job, preset *ffmpeg.Preset) (bool, string, int, float64, float64, error) {
-	// Acquire analysis semaphore
-	select {
-	case wp.analysisSem <- struct{}{}:
-		defer func() { <-wp.analysisSem }()
-	case <-ctx.Done():
-		return false, "", 0, 0, 0, ctx.Err()
+	// Acquire analysis slot (limited to worker count for parallel analysis)
+	for {
+		wp.analysisMu.Lock()
+		if wp.analysisCount < wp.analysisLimit {
+			wp.analysisCount++
+			wp.analysisMu.Unlock()
+			break
+		}
+		wp.analysisMu.Unlock()
+
+		// At limit, wait with context check
+		select {
+		case <-ctx.Done():
+			return false, "", 0, 0, 0, ctx.Err()
+		case <-time.After(100 * time.Millisecond):
+			// Retry
+		}
 	}
+
+	defer func() {
+		wp.analysisMu.Lock()
+		wp.analysisCount--
+		wp.analysisMu.Unlock()
+	}()
 
 	// Update phase
 	_ = wp.queue.UpdateJobPhase(job.ID, PhaseAnalyzing)
