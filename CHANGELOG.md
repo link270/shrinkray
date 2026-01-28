@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.0] - 2026-01-28
+
+### Added
+- **SmartShrink presets with VMAF-guided quality optimization** (#78)
+  - New `smartshrink-hevc` and `smartshrink-av1` presets that analyze video content to find optimal compression
+  - Uses VMAF (Video Multi-Method Assessment Fusion) to measure perceptual quality
+  - Per-job quality selection: Acceptable (85), Good (90), Excellent (94) VMAF targets
+  - Binary search algorithm finds the best CRF/bitrate that meets your quality threshold
+  - Sample extraction at 5 positions (10%, 30%, 50%, 70%, 90%) with trimmed mean scoring
+  - Supports all hardware encoders (NVENC, QSV, VAAPI, VideoToolbox) and software fallback
+  - New job phase indicator: `analyzing` shown during VMAF analysis before encoding
+  - SmartShrink results displayed in expandable job details after completion
+- **New VMAF package** (`internal/ffmpeg/vmaf/`)
+  - Automatic VMAF model detection with fallback support
+  - HDR tonemapping support for VMAF analysis
+  - Parallel VMAF analysis matching worker count
+- **UI improvements**
+  - Grouped preset dropdown (SmartShrink / Compress / Downscale categories)
+  - Category prefix shown in closed dropdown (e.g., "Compress - HEVC")
+  - Quality dropdown for SmartShrink presets
+  - Preset and quality selections persist to localStorage
+  - HW/SW badge in preset dropdown
+
+### Changed
+- Database schema updated to v6 (adds SmartShrink job fields)
+- Presets now include `is_smart_shrink` and `skips_codec_check` flags
+- Job model includes new fields: `Phase`, `SmartShrinkQuality`, `VMafScore`, `SelectedCRF`, `QualityMod`, `SamplesUsed`, `SearchIterations`
+
 ## [1.8.5] - 2026-01-22
 
 ### Added

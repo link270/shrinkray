@@ -15,36 +15,64 @@ Returns all available presets with their assigned encoder.
 ```json
 [
   {
+    "id": "smartshrink-hevc",
+    "name": "SmartShrink (HEVC) [HW]",
+    "description": "Auto-optimize with VMAF analysis",
+    "encoder": "nvenc",
+    "codec": "hevc",
+    "max_height": 0,
+    "is_smart_shrink": true,
+    "skips_codec_check": true
+  },
+  {
+    "id": "smartshrink-av1",
+    "name": "SmartShrink (AV1) [HW]",
+    "description": "Auto-optimize with VMAF analysis",
+    "encoder": "nvenc",
+    "codec": "av1",
+    "max_height": 0,
+    "is_smart_shrink": true,
+    "skips_codec_check": true
+  },
+  {
     "id": "compress-hevc",
-    "name": "Compress (HEVC)",
+    "name": "Compress (HEVC) [HW]",
     "description": "Reduce size with HEVC encoding",
     "encoder": "nvenc",
     "codec": "hevc",
-    "max_height": 0
+    "max_height": 0,
+    "is_smart_shrink": false,
+    "skips_codec_check": false
   },
   {
     "id": "compress-av1",
-    "name": "Compress (AV1)",
+    "name": "Compress (AV1) [HW]",
     "description": "Maximum compression with AV1 encoding",
     "encoder": "nvenc",
     "codec": "av1",
-    "max_height": 0
+    "max_height": 0,
+    "is_smart_shrink": false,
+    "skips_codec_check": false
   },
   {
     "id": "1080p",
-    "name": "Downscale to 1080p",
+    "name": "Downscale to 1080p [HW]",
     "description": "Downscale to 1080p max (HEVC)",
     "encoder": "nvenc",
     "codec": "hevc",
-    "max_height": 1080
+    "max_height": 1080,
+    "is_smart_shrink": false,
+    "skips_codec_check": false
   },
   {
     "id": "720p",
-    "name": "Downscale to 720p",
+    "name": "Downscale to 720p [HW]",
     "description": "Downscale to 720p (big savings)",
     "encoder": "nvenc",
     "codec": "hevc",
-    "max_height": 720
+    "max_height": 720,
+    "is_smart_shrink": false,
+    "skips_codec_check": false
   }
 ]
 ```
@@ -54,11 +82,32 @@ Returns all available presets with their assigned encoder.
 | Field | Type | Description |
 |-------|------|-------------|
 | `id` | string | Preset identifier for API calls |
-| `name` | string | Human-readable name |
+| `name` | string | Human-readable name (includes [HW]/[SW] suffix) |
 | `description` | string | Brief description |
 | `encoder` | string | Assigned hardware encoder |
 | `codec` | string | Target codec: `hevc` or `av1` |
 | `max_height` | int | Max output height (0 = no scaling) |
+| `is_smart_shrink` | bool | True for VMAF-based SmartShrink presets |
+| `skips_codec_check` | bool | True if preset bypasses same-codec skip logic |
+
+### SmartShrink presets
+
+SmartShrink presets use VMAF analysis to find optimal compression settings. They require VMAF support in FFmpeg and are hidden if VMAF is not available.
+
+When creating jobs with SmartShrink presets, include the `smartshrink_quality` field:
+
+```json
+{
+  "paths": ["/media/video.mkv"],
+  "preset_id": "smartshrink-hevc",
+  "smartshrink_quality": "good"
+}
+```
+
+Quality options:
+- `acceptable` - VMAF 85 (noticeable but acceptable compression)
+- `good` - VMAF 90 (minimal perceptible difference, default)
+- `excellent` - VMAF 94 (visually lossless)
 
 ## List encoders
 
@@ -115,7 +164,9 @@ Returns all detected hardware encoders and which one is selected as best.
     "available": true,
     "hevc": true,
     "av1": true
-  }
+  },
+  "vmaf_available": true,
+  "vmaf_models": ["vmaf_v0.6.1", "vmaf_4k_v0.6.1"]
 }
 ```
 

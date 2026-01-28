@@ -97,6 +97,57 @@ sequenceDiagram
     end
 ```
 
+## SmartShrink execution flow
+
+SmartShrink jobs have an additional VMAF analysis phase before encoding:
+
+```mermaid
+sequenceDiagram
+    participant W as Worker
+    participant Q as Queue
+    participant V as VMAF
+    participant FF as FFmpeg
+    participant SSE as Subscribers
+
+    W->>Q: GetNext()
+    Q-->>W: SmartShrink job
+    W->>Q: StartJob()
+    W->>Q: UpdatePhase("analyzing")
+    Q->>SSE: Broadcast "progress"
+
+    W->>V: Analyze(samples, threshold)
+
+    loop Binary search
+        V->>FF: Encode sample at CRF
+        FF-->>V: Sample file
+        V->>FF: Calculate VMAF score
+        FF-->>V: Score
+    end
+
+    V-->>W: Optimal CRF/modifier
+    W->>Q: UpdateVMAFResult()
+    W->>Q: UpdatePhase("encoding")
+    Q->>SSE: Broadcast "progress"
+
+    W->>FF: Transcode with optimal settings
+
+    loop Progress updates
+        FF-->>W: Progress line
+        W->>Q: UpdateProgress()
+        Q->>SSE: Broadcast "progress"
+    end
+
+    FF-->>W: Exit 0
+    W->>Q: CompleteJob()
+    Q->>SSE: Broadcast "complete"
+```
+
+The VMAF analysis phase:
+1. Extracts 5 samples at fixed positions (10%, 30%, 50%, 70%, 90%)
+2. Uses binary search to find optimal CRF/bitrate meeting the quality threshold
+3. Scores use trimmed mean (drops highest/lowest) for stability
+4. Analysis runs in parallel (limited by worker count)
+
 ## Skip logic
 
 Jobs are automatically skipped when:

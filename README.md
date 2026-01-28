@@ -18,12 +18,13 @@ Shrinkray is a user-friendly video transcoding tool designed to be simple from t
 
 ### Features
 
-- **4 Smart Presets** — HEVC compress, AV1 compress, 1080p downscale, 720p downscale
+- **SmartShrink** — VMAF-guided auto-optimization finds the best quality for your target file size
+- **6 Presets** — SmartShrink (HEVC/AV1), Compress (HEVC/AV1), Downscale (1080p/720p)
 - **Full GPU Pipeline** — Hardware decoding AND encoding with software fallback
 - **HDR Support** — Automatic HDR detection with optional HDR-to-SDR tonemapping
 - **Batch Selection** — Select entire folders to transcode whole seasons or libraries at once
 - **Scheduling** — Restrict transcoding to specific hours (e.g., overnight only)
-- **Quality Control** — Adjustable CRF for fine-tuned compression
+- **Quality Control** — Adjustable CRF for fine-tuned compression, or let SmartShrink decide
 - **Queue Management** — Sort by name, size, or date; filter by status; pause/resume
 - **Push Notifications** — Pushover alerts when your queue completes
 - **Smart Skipping** — Automatically skips files already in target codec/resolution
@@ -88,10 +89,22 @@ docker run -d \
 
 | Preset | Codec | Description | Theoretical Savings |
 |--------|-------|-------------|-----------------|
+| **SmartShrink (HEVC)** | H.265 | VMAF-guided auto-optimization | Varies by quality tier |
+| **SmartShrink (AV1)** | AV1 | VMAF-guided auto-optimization | Varies by quality tier |
 | **Compress (HEVC)** | H.265 | Re-encode to HEVC | 40–60% smaller |
 | **Compress (AV1)** | AV1 | Re-encode to AV1 | 50–70% smaller |
 | **1080p** | HEVC | Downscale 4K → 1080p | 60–80% smaller |
 | **720p** | HEVC | Downscale to 720p | 70–85% smaller |
+
+### SmartShrink Quality Tiers
+
+SmartShrink analyzes your video using VMAF to find the optimal compression settings:
+
+| Quality | VMAF Target | Description |
+|---------|-------------|-------------|
+| **Acceptable** | 85 | Noticeable but acceptable compression |
+| **Good** | 90 | Minimal perceptible difference (default) |
+| **Excellent** | 94 | Visually lossless |
 
 By default (MKV output), audio and subtitles are copied unchanged. MP4 output mode converts audio to AAC stereo and strips subtitles for web compatibility.
 

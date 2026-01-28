@@ -58,6 +58,36 @@ FFmpeg integration with four files:
 | `presets.go` | Preset definitions, FFmpeg argument building |
 | `transcode.go` | FFmpeg process execution, progress parsing |
 
+## internal/ffmpeg/vmaf
+
+VMAF quality analysis for SmartShrink presets:
+
+| File | Responsibility |
+|------|----------------|
+| `vmaf.go` | Package interface, QualityRange struct |
+| `detect.go` | VMAF model detection, availability checking |
+| `sample.go` | Sample extraction at fixed positions |
+| `score.go` | VMAF scoring with trimmed mean |
+| `search.go` | Binary search for optimal CRF/bitrate |
+| `analyze.go` | Main analysis orchestration |
+
+**SmartShrink flow:**
+
+```mermaid
+flowchart LR
+    D[Detect VMAF] --> S[Extract Samples]
+    S --> B[Binary Search]
+    B --> V[Score at CRF]
+    V -->|below threshold| B
+    V -->|above threshold| R[Return optimal]
+
+    style D fill:#3a4a5f,stroke:#8ab4ff
+    style S fill:#3a4a5f,stroke:#8ab4ff
+    style B fill:#4a3a5f,stroke:#b88aff
+    style V fill:#4a3a5f,stroke:#b88aff
+    style R fill:#2d4a3e,stroke:#6bcf8e
+```
+
 **Encoder detection flow:**
 
 ```mermaid

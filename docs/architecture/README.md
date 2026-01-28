@@ -61,6 +61,7 @@ shrinkray/
 │   ├── api/               # HTTP handlers, SSE streaming
 │   ├── jobs/              # Job model, queue, worker pool
 │   ├── ffmpeg/            # FFmpeg wrapper, hardware detection
+│   │   └── vmaf/          # VMAF quality analysis for SmartShrink
 │   ├── store/             # SQLite persistence
 │   ├── config/            # YAML config loading
 │   ├── browse/            # Directory browsing, file probing
