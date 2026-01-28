@@ -123,12 +123,8 @@ func main() {
 	ffmpeg.DetectEncoders(cfg.FFmpegPath)
 
 	// Detect VMAF availability (must be BEFORE preset init for SmartShrink presets)
+	// Logging deferred until after splash screen
 	vmaf.DetectVMAF(cfg.FFmpegPath)
-	if vmaf.IsAvailable() {
-		logger.Info("VMAF support detected", "models", vmaf.GetModels())
-	} else {
-		logger.Info("VMAF not available - SmartShrink presets will be hidden")
-	}
 
 	// Initialize presets (depends on encoder AND VMAF detection)
 	ffmpeg.InitPresets()
@@ -179,6 +175,11 @@ func main() {
 	fmt.Printf("  Logging started (level: %s)\n", cfg.LogLevel)
 	fmt.Println("─────────────────────────────────────────────────────────────")
 	logger.Info("Shrinkray started", "version", shrinkray.Version, "encoder", best.Name, "workers", cfg.Workers, "port", *port)
+	if vmaf.IsAvailable() {
+		logger.Info("VMAF support detected", "models", vmaf.GetModels())
+	} else {
+		logger.Info("VMAF not available - SmartShrink presets will be hidden")
+	}
 
 	// Set up graceful shutdown
 	server := &http.Server{
