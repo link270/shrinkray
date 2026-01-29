@@ -486,16 +486,7 @@ func (w *Worker) tryEncoderFallbacks(
 			"fallback_encoder", fallback.Accel)
 
 		// Create fallback preset
-		fallbackPreset := &ffmpeg.Preset{
-			ID:              preset.ID,
-			Name:            preset.Name,
-			Description:     preset.Description,
-			Encoder:         fallback.Accel,
-			Codec:           preset.Codec,
-			MaxHeight:       preset.MaxHeight,
-			IsSmartShrink:   preset.IsSmartShrink,
-			SkipsCodecCheck: preset.SkipsCodecCheck,
-		}
+		fallbackPreset := preset.WithEncoder(fallback.Accel)
 
 		// Recompute whether this fallback encoder needs software decode
 		// (each encoder has different decode capabilities)
