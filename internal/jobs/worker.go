@@ -722,70 +722,49 @@ func (w *Worker) processJob(job *Job) {
 
 	result, err := w.transcoder.Transcode(jobCtx, job.InputPath, tempPath, preset, duration, job.Bitrate, job.Width, job.Height, qualityHEVC, qualityAV1, qualityMod, totalFrames, progressCh, useSoftwareDecode, w.cfg.OutputFormat, tonemapParams)
 
-	if err != nil {
-		// Check if it was cancelled
-		if jobCtx.Err() == context.Canceled {
-			os.Remove(tempPath)
-			// Only mark as cancelled if user-initiated (jobCtx cancelled but w.ctx still active)
-			// If w.ctx is also cancelled, this is a shutdown - leave job as "running"
-			// so it will be reset to pending on restart
-			// Also skip if job was requeued by Pause() (status changed to pending)
-			if w.ctx.Err() != context.Canceled && job.Status == StatusRunning {
-				logger.Info("Job cancelled", "job_id", job.ID)
-				_ = w.queue.CancelJob(job.ID)
-			} else if w.ctx.Err() == context.Canceled {
-				logger.Info("Job interrupted by shutdown", "job_id", job.ID)
-			}
-			return
-		}
-
-		// If using hardware encoder and it failed, retry with software decode
-		// Skip if we already used software decode
+	// Recovery strategies for hardware encoder failures
+	if err != nil && jobCtx.Err() != context.Canceled && preset.Encoder != ffmpeg.HWAccelNone {
+		// Strategy 1: If we used HW decode, retry with SW decode (same encoder)
 		if !useSoftwareDecode && shouldRetryWithSoftwareDecode(preset.Encoder) {
-			logger.Warn("Hardware transcode failed, retrying with software decode", "job_id", job.ID, "error", err.Error())
+			logger.Warn("Hardware transcode failed, retrying with software decode",
+				"job_id", job.ID, "error", err.Error())
 
-			// Create new progress channel for retry
-			retryProgressCh := make(chan ffmpeg.Progress, 10)
-			go func() {
-				for progress := range retryProgressCh {
-					eta := util.FormatDuration(progress.ETA)
-					w.queue.UpdateProgress(job.ID, progress.Percent, progress.Speed, eta)
-				}
-			}()
+			result, err = w.attemptTranscode(jobCtx, job, preset, tempPath,
+				duration, qualityHEVC, qualityAV1, qualityMod, totalFrames, tonemapParams, true)
 
-			// Retry with software decode
-			result, err = w.transcoder.Transcode(jobCtx, job.InputPath, tempPath, preset, duration, job.Bitrate, job.Width, job.Height, qualityHEVC, qualityAV1, qualityMod, totalFrames, retryProgressCh, true, w.cfg.OutputFormat, tonemapParams)
-
-			if err != nil {
-				// Check if cancelled during retry
-				if jobCtx.Err() == context.Canceled {
-					os.Remove(tempPath)
-					// Only mark as cancelled if user-initiated, not shutdown
-					// Also skip if job was requeued by Pause() (status changed to pending)
-					if w.ctx.Err() != context.Canceled && job.Status == StatusRunning {
-						logger.Info("Job cancelled during software decode retry", "job_id", job.ID)
-						_ = w.queue.CancelJob(job.ID)
-					} else if w.ctx.Err() == context.Canceled {
-						logger.Info("Job interrupted by shutdown during retry", "job_id", job.ID)
-					}
-					return
-				}
-
-				// Retry also failed
-				os.Remove(tempPath)
-				logger.Error("Job failed after software decode retry", "job_id", job.ID, "error", err.Error())
-				_ = w.queue.FailJob(job.ID, err.Error())
-				return
+			if err == nil {
+				logger.Info("Software decode fallback succeeded", "job_id", job.ID)
 			}
-
-			logger.Info("Software decode fallback succeeded", "job_id", job.ID)
-		} else {
-			// Already used software decode or not using hardware encoder, fail the job
-			os.Remove(tempPath)
-			logger.Error("Job failed", "job_id", job.ID, "error", err.Error())
-			_ = w.queue.FailJob(job.ID, err.Error())
-			return
 		}
+
+		// Strategy 2: Try fallback encoders (only if still failing)
+		if err != nil && jobCtx.Err() != context.Canceled {
+			logger.Warn("Primary encoder failed, trying fallback encoders",
+				"job_id", job.ID, "encoder", preset.Encoder, "error", err.Error())
+
+			result, err = w.tryEncoderFallbacks(jobCtx, job, preset, tempPath,
+				duration, qualityHEVC, qualityAV1, qualityMod, totalFrames, tonemapParams, err)
+		}
+	}
+
+	// Handle cancellation (could happen at any point above)
+	if jobCtx.Err() == context.Canceled {
+		os.Remove(tempPath)
+		if w.ctx.Err() != context.Canceled && job.Status == StatusRunning {
+			logger.Info("Job cancelled", "job_id", job.ID)
+			_ = w.queue.CancelJob(job.ID)
+		} else if w.ctx.Err() == context.Canceled {
+			logger.Info("Job interrupted by shutdown", "job_id", job.ID)
+		}
+		return
+	}
+
+	// Handle final failure (after all recovery strategies exhausted)
+	if err != nil {
+		os.Remove(tempPath)
+		logger.Error("Job failed", "job_id", job.ID, "error", err.Error())
+		_ = w.queue.FailJob(job.ID, err.Error())
+		return
 	}
 
 	// Check if transcoded file is larger than original
