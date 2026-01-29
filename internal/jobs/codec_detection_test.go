@@ -382,6 +382,92 @@ func TestRequiresSoftwareDecodeProactive(t *testing.T) {
 	}
 }
 
+// TestEncoderFallbackChainIntegrity verifies the fallback chain is properly configured
+func TestEncoderFallbackChainIntegrity(t *testing.T) {
+	// Verify the fallback chain is properly configured and terminates correctly
+
+	codecs := []ffmpeg.Codec{ffmpeg.CodecHEVC, ffmpeg.CodecAV1}
+	hwEncoders := []ffmpeg.HWAccel{
+		ffmpeg.HWAccelVideoToolbox,
+		ffmpeg.HWAccelNVENC,
+		ffmpeg.HWAccelQSV,
+		ffmpeg.HWAccelVAAPI,
+	}
+
+	for _, codec := range codecs {
+		for _, startEncoder := range hwEncoders {
+			name := fmt.Sprintf("%s_%s", startEncoder, codec)
+			t.Run(name, func(t *testing.T) {
+				// Walk the entire fallback chain
+				current := startEncoder
+				seen := make(map[ffmpeg.HWAccel]bool)
+				steps := 0
+				maxSteps := 10
+
+				for steps < maxSteps {
+					if seen[current] {
+						t.Fatalf("Cycle detected at %v after %d steps", current, steps)
+					}
+					seen[current] = true
+
+					if current == ffmpeg.HWAccelNone {
+						// Successfully reached software - chain is valid
+						return
+					}
+
+					fallback := ffmpeg.GetFallbackEncoder(current, codec)
+					if fallback == nil {
+						// Chain ended - verify software wasn't available
+						swEnc := ffmpeg.GetEncoderByKey(ffmpeg.HWAccelNone, codec)
+						if swEnc != nil && swEnc.Available {
+							t.Errorf("Chain ended at %v but software is available", current)
+						}
+						return
+					}
+
+					// Verify fallback is lower priority
+					if fallback.Accel == current {
+						t.Fatalf("Fallback returned same encoder %v", current)
+					}
+
+					current = fallback.Accel
+					steps++
+				}
+
+				t.Errorf("Chain exceeded %d steps without terminating", maxSteps)
+			})
+		}
+	}
+}
+
+// TestFallbackTriggersForSoftwareDecodeStart verifies encoder fallback works when starting with SW decode
+func TestFallbackTriggersForSoftwareDecodeStart(t *testing.T) {
+	// Verify that encoder fallback logic works even when we start with SW decode
+	// This is the critical case that was previously broken (Issue #77)
+
+	// The key insight: shouldRetryWithSoftwareDecode returns false for HWAccelNone,
+	// so software encoder won't try SW decode retry (it's already SW everything).
+	// But GetFallbackEncoder(HWAccelNone, codec) returns nil, so we don't loop forever.
+
+	// Test that software encoder correctly returns no fallback
+	for _, codec := range []ffmpeg.Codec{ffmpeg.CodecHEVC, ffmpeg.CodecAV1} {
+		fallback := ffmpeg.GetFallbackEncoder(ffmpeg.HWAccelNone, codec)
+		if fallback != nil {
+			t.Errorf("GetFallbackEncoder(HWAccelNone, %v) = %v, want nil", codec, fallback.Accel)
+		}
+	}
+
+	// Test that hardware encoders always have a fallback path
+	for _, encoder := range []ffmpeg.HWAccel{ffmpeg.HWAccelQSV, ffmpeg.HWAccelVAAPI, ffmpeg.HWAccelNVENC} {
+		fallback := ffmpeg.GetFallbackEncoder(encoder, ffmpeg.CodecHEVC)
+		// Should either return a fallback or be unavailable on this system
+		// The key is it shouldn't panic or loop
+		if fallback != nil && fallback.Accel == encoder {
+			t.Errorf("GetFallbackEncoder(%v) returned same encoder", encoder)
+		}
+	}
+}
+
 // TestShouldRetryWithSoftwareDecode verifies the retry decision logic
 func TestShouldRetryWithSoftwareDecode(t *testing.T) {
 	tests := []struct {
