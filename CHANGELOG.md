@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] - 2026-01-29
+
+### Added
+- **Configurable concurrent VMAF analyses** (#79)
+  - New `max_concurrent_analyses` setting (1-3) in Advanced settings
+  - Controls how many SmartShrink jobs can analyze simultaneously
+  - Each analysis uses ~50% CPU (`numCPU/2` threads) for decode/filter operations
+  - Multiple concurrent analyses stack (2 = 100% CPU, 3 = 150% over-subscribed)
+- **Low-priority VMAF processing**
+  - VMAF FFmpeg processes now run with `nice -n 19` (lowest priority)
+  - SmartShrink analysis yields to other processes when system is busy
+  - Regular transcoding still runs at normal priority
+
+### Fixed
+- VMAF analysis no longer pins CPU to 90%+ on idle systems
+- Thread limiting via `-threads` and `-filter_threads` flags on all VMAF FFmpeg calls
+
 ## [2.0.0] - 2026-01-28
 
 ### Added
