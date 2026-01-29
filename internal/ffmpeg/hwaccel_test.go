@@ -138,6 +138,119 @@ func TestRequiresSoftwareDecode_AllEncoders(t *testing.T) {
 	}
 }
 
+func TestGetFallbackEncoder(t *testing.T) {
+	// Note: These tests check the fallback logic, not actual encoder availability.
+	// We test the priority order and nil return cases.
+	tests := []struct {
+		name           string
+		current        HWAccel
+		codec          Codec
+		expectNil      bool
+		expectNotAccel HWAccel
+	}{
+		// Software has no fallback
+		{"Software_HEVC_NoFallback", HWAccelNone, CodecHEVC, true, HWAccelNone},
+		{"Software_AV1_NoFallback", HWAccelNone, CodecAV1, true, HWAccelNone},
+
+		// Each encoder should return something lower in priority (or nil if nothing available)
+		// We can't guarantee what's available, but we can check it's not the same or higher priority
+		{"QSV_NotSameOrHigher", HWAccelQSV, CodecHEVC, false, HWAccelQSV},
+		{"VAAPI_NotSameOrHigher", HWAccelVAAPI, CodecHEVC, false, HWAccelVAAPI},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := GetFallbackEncoder(tt.current, tt.codec)
+
+			if tt.expectNil {
+				if result != nil {
+					t.Errorf("GetFallbackEncoder(%v, %v) = %v, want nil",
+						tt.current, tt.codec, result.Accel)
+				}
+				return
+			}
+
+			// For non-nil cases, just verify it's not the same encoder
+			// (actual availability depends on system)
+			if result != nil && result.Accel == tt.expectNotAccel {
+				t.Errorf("GetFallbackEncoder(%v, %v) returned same encoder %v",
+					tt.current, tt.codec, result.Accel)
+			}
+		})
+	}
+}
+
+func TestGetFallbackEncoderPriorityOrder(t *testing.T) {
+	// Test that fallback follows priority: VideoToolbox > NVENC > QSV > VAAPI > Software
+	priority := []HWAccel{HWAccelVideoToolbox, HWAccelNVENC, HWAccelQSV, HWAccelVAAPI, HWAccelNone}
+
+	for i := 0; i < len(priority)-1; i++ {
+		current := priority[i]
+		result := GetFallbackEncoder(current, CodecHEVC)
+
+		if result == nil {
+			// No fallback available - that's ok, depends on system
+			continue
+		}
+
+		// Find result's position in priority
+		resultIdx := -1
+		for j, p := range priority {
+			if p == result.Accel {
+				resultIdx = j
+				break
+			}
+		}
+
+		if resultIdx <= i {
+			t.Errorf("GetFallbackEncoder(%v) returned %v which is same or higher priority",
+				current, result.Accel)
+		}
+	}
+}
+
+func TestGetFallbackEncoderAlwaysReturnsSoftwareEventually(t *testing.T) {
+	// Critical: The fallback chain MUST eventually reach software (if available)
+	// This ensures we don't get stuck in a loop or miss software fallback.
+
+	// Walk the entire fallback chain from each starting point
+	startPoints := []HWAccel{HWAccelVideoToolbox, HWAccelNVENC, HWAccelQSV, HWAccelVAAPI}
+
+	for _, start := range startPoints {
+		t.Run(string(start), func(t *testing.T) {
+			current := start
+			seen := make(map[HWAccel]bool)
+			maxSteps := 10
+
+			for i := 0; i < maxSteps; i++ {
+				if seen[current] {
+					t.Fatalf("Fallback chain has a cycle at %v", current)
+				}
+				seen[current] = true
+
+				if current == HWAccelNone {
+					// Reached software - success
+					return
+				}
+
+				fallback := GetFallbackEncoder(current, CodecHEVC)
+				if fallback == nil {
+					// Chain ended before software - check if software is available
+					swEnc := GetEncoderByKey(HWAccelNone, CodecHEVC)
+					if swEnc != nil && swEnc.Available {
+						t.Errorf("Fallback chain from %v ended at %v but software encoder is available",
+							start, current)
+					}
+					return
+				}
+				current = fallback.Accel
+			}
+
+			t.Errorf("Fallback chain from %v exceeded %d steps", start, maxSteps)
+		})
+	}
+}
+
 // TestHWAccelConstants verifies the HWAccel constants are distinct
 func TestHWAccelConstants(t *testing.T) {
 	accels := map[HWAccel]string{

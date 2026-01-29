@@ -449,6 +449,64 @@ func GetBestEncoder() *HWEncoder {
 	return GetBestEncoderForCodec(CodecHEVC)
 }
 
+// GetFallbackEncoder returns the next available encoder after the current one,
+// following priority order: VideoToolbox > NVENC > QSV > VAAPI > Software.
+// Returns nil if current is already software (no fallback available).
+//
+// This function guarantees that if software encoding is available, it will
+// eventually be returned as a fallback (it's always last in the chain).
+func GetFallbackEncoder(current HWAccel, codec Codec) *HWEncoder {
+	priority := []HWAccel{HWAccelVideoToolbox, HWAccelNVENC, HWAccelQSV, HWAccelVAAPI, HWAccelNone}
+
+	// Find current position in priority
+	currentIdx := -1
+	for i, accel := range priority {
+		if accel == current {
+			currentIdx = i
+			break
+		}
+	}
+
+	// Already at software or unknown encoder
+	if currentIdx == -1 || current == HWAccelNone {
+		return nil
+	}
+
+	// Find next available encoder
+	for i := currentIdx + 1; i < len(priority); i++ {
+		enc := GetEncoderByKey(priority[i], codec)
+		if enc != nil && enc.Available {
+			return enc
+		}
+
+		// Special case: software encoder should always be considered available
+		// even if DetectEncoders wasn't called or cache is stale
+		if priority[i] == HWAccelNone {
+			// Return software encoder as ultimate fallback
+			if codec == CodecAV1 {
+				return &HWEncoder{
+					Accel:       HWAccelNone,
+					Codec:       CodecAV1,
+					Name:        "Software AV1",
+					Description: "CPU-based AV1 encoding (SVT-AV1)",
+					Encoder:     "libsvtav1",
+					Available:   true,
+				}
+			}
+			return &HWEncoder{
+				Accel:       HWAccelNone,
+				Codec:       CodecHEVC,
+				Name:        "Software HEVC",
+				Description: "CPU-based HEVC encoding (libx265)",
+				Encoder:     "libx265",
+				Available:   true,
+			}
+		}
+	}
+
+	return nil
+}
+
 // ListAvailableEncoders returns a slice of available encoders for all codecs
 func ListAvailableEncoders() []*HWEncoder {
 	availableEncoders.mu.RLock()
