@@ -445,6 +445,131 @@ func (w *Worker) isScheduleAllowed() bool {
 	return hour >= start && hour < end
 }
 
+// tryEncoderFallbacks attempts to transcode using fallback encoders after the primary encoder failed.
+// It tries each fallback encoder with HW decode (if appropriate), then SW decode, before moving to the next.
+//
+// Parameters:
+//   - priorError: the error from the failed primary encoder (preserved if no fallbacks work)
+//   - job, preset, etc: transcode parameters
+//
+// Returns the successful result, or priorError if all fallbacks fail.
+func (w *Worker) tryEncoderFallbacks(
+	jobCtx context.Context,
+	job *Job,
+	preset *ffmpeg.Preset,
+	tempPath string,
+	duration time.Duration,
+	qualityHEVC, qualityAV1 int,
+	qualityMod float64,
+	totalFrames int64,
+	tonemapParams *ffmpeg.TonemapParams,
+	priorError error,
+) (*ffmpeg.TranscodeResult, error) {
+	currentEncoder := preset.Encoder
+	lastError := priorError
+
+	for {
+		// Check for cancellation before trying next fallback
+		if jobCtx.Err() == context.Canceled {
+			return nil, context.Canceled
+		}
+
+		fallback := ffmpeg.GetFallbackEncoder(currentEncoder, preset.Codec)
+		if fallback == nil {
+			// No more fallbacks available - return the last error we saw
+			return nil, lastError
+		}
+
+		logger.Warn("Encoder failed, trying fallback",
+			"job_id", job.ID,
+			"failed_encoder", currentEncoder,
+			"fallback_encoder", fallback.Accel)
+
+		// Create fallback preset
+		fallbackPreset := &ffmpeg.Preset{
+			ID:              preset.ID,
+			Name:            preset.Name,
+			Description:     preset.Description,
+			Encoder:         fallback.Accel,
+			Codec:           preset.Codec,
+			MaxHeight:       preset.MaxHeight,
+			IsSmartShrink:   preset.IsSmartShrink,
+			SkipsCodecCheck: preset.SkipsCodecCheck,
+		}
+
+		// Recompute whether this fallback encoder needs software decode
+		// (each encoder has different decode capabilities)
+		fallbackNeedsSWDecode := ffmpeg.RequiresSoftwareDecode(
+			job.VideoCodec, job.Profile, job.BitDepth, fallback.Accel)
+
+		// Try with HW decode first (unless this encoder requires SW decode)
+		if !fallbackNeedsSWDecode {
+			result, err := w.attemptTranscode(jobCtx, job, fallbackPreset, tempPath,
+				duration, qualityHEVC, qualityAV1, qualityMod, totalFrames, tonemapParams, false)
+
+			if err == nil {
+				logger.Info("Fallback encoder succeeded", "job_id", job.ID, "encoder", fallback.Accel)
+				return result, nil
+			}
+
+			if jobCtx.Err() == context.Canceled {
+				return nil, context.Canceled
+			}
+
+			lastError = err
+		}
+
+		// Try SW decode with fallback encoder (unless it's software encoder - no point)
+		if shouldRetryWithSoftwareDecode(fallback.Accel) {
+			result, err := w.attemptTranscode(jobCtx, job, fallbackPreset, tempPath,
+				duration, qualityHEVC, qualityAV1, qualityMod, totalFrames, tonemapParams, true)
+
+			if err == nil {
+				logger.Info("Fallback encoder succeeded with SW decode", "job_id", job.ID, "encoder", fallback.Accel)
+				return result, nil
+			}
+
+			if jobCtx.Err() == context.Canceled {
+				return nil, context.Canceled
+			}
+
+			lastError = err
+		}
+
+		// This fallback also failed, try next
+		currentEncoder = fallback.Accel
+	}
+}
+
+// attemptTranscode runs a single transcode attempt with a fresh progress channel.
+// This helper centralizes progress channel creation and forwarding.
+func (w *Worker) attemptTranscode(
+	jobCtx context.Context,
+	job *Job,
+	preset *ffmpeg.Preset,
+	tempPath string,
+	duration time.Duration,
+	qualityHEVC, qualityAV1 int,
+	qualityMod float64,
+	totalFrames int64,
+	tonemapParams *ffmpeg.TonemapParams,
+	softwareDecode bool,
+) (*ffmpeg.TranscodeResult, error) {
+	// Create fresh progress channel (Transcode closes it when done)
+	progressCh := make(chan ffmpeg.Progress, 10)
+	go func() {
+		for progress := range progressCh {
+			eta := util.FormatDuration(progress.ETA)
+			w.queue.UpdateProgress(job.ID, progress.Percent, progress.Speed, eta)
+		}
+	}()
+
+	return w.transcoder.Transcode(jobCtx, job.InputPath, tempPath,
+		preset, duration, job.Bitrate, job.Width, job.Height,
+		qualityHEVC, qualityAV1, qualityMod, totalFrames, progressCh,
+		softwareDecode, w.cfg.OutputFormat, tonemapParams)
+}
+
 // processJob handles a single transcoding job
 func (w *Worker) processJob(job *Job) {
 	startTime := time.Now()
