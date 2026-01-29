@@ -73,6 +73,7 @@ Open `http://localhost:8080` in your browser.
 | `temp_path` | *(empty)* | Fast storage for temp files (SSD recommended) |
 | `original_handling` | `replace` | `replace` = delete original, `keep` = rename to `.old` |
 | `workers` | `1` | Concurrent transcode jobs (1-6) |
+| `max_concurrent_analyses` | `1` | Simultaneous SmartShrink VMAF analyses (1-3) |
 | `quality_hevc` | `0` | CRF override for HEVC (0 = encoder default, range: 15-40) |
 | `quality_av1` | `0` | CRF override for AV1 (0 = encoder default, range: 20-50) |
 | `schedule_enabled` | `false` | Enable time-based scheduling |
@@ -201,12 +202,23 @@ Older hardware falls back to software AV1 encoding (significantly slower but sti
 | **Compress (AV1)** | AV1 | Maximum compression | 50-70% smaller |
 | **1080p** | HEVC | Downscale 4K to 1080p | 60-80% smaller |
 | **720p** | HEVC | Downscale to 720p | 70-85% smaller |
+| **SmartShrink (HEVC)** | H.265 | VMAF-guided auto-optimization | Varies by content |
+| **SmartShrink (AV1)** | AV1 | VMAF-guided auto-optimization | Varies by content |
 
 ### Which preset should I use?
 
-- **Compress (HEVC)**: Best balance of compatibility and savings. Works on most devices.
+- **SmartShrink**: Best results. Analyzes your video to find optimal compression. Uses more CPU during analysis.
+- **Compress (HEVC)**: Fast, fixed quality. Best balance of compatibility and savings.
 - **Compress (AV1)**: Maximum compression but requires newer playback devices.
 - **1080p/720p**: For 4K content you don't need in full resolution.
+
+### Why does SmartShrink use so much CPU?
+
+SmartShrink uses VMAF (Video Multi-Method Assessment Fusion) to analyze video quality. VMAF is CPU-only—there's no GPU acceleration. To minimize impact:
+
+- VMAF processes run at lowest CPU priority (`nice -n 19`) and yield to other work
+- Each analysis uses ~50% of CPU cores for decode/filter operations
+- Configure concurrent analyses (1-3) in Advanced settings based on your system
 
 ### How do quality settings work?
 

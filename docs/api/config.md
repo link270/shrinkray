@@ -44,6 +44,7 @@ Returns current configuration with encoder defaults.
 | `media_path` | string | Root media directory |
 | `original_handling` | string | `replace` or `keep` |
 | `workers` | int | Number of concurrent workers |
+| `max_concurrent_analyses` | int | Simultaneous SmartShrink VMAF analyses (1-3) |
 | `has_temp_path` | bool | Whether a temp path is configured |
 | `pushover_user_key` | string | Pushover user key |
 | `pushover_app_token` | string | Pushover app token |
@@ -86,6 +87,7 @@ Update configuration settings. Only include fields you want to change.
 |-------|------|-------------|-------------|
 | `original_handling` | string | `replace` or `keep` | What to do with originals |
 | `workers` | int | 1-6 | Concurrent transcode jobs |
+| `max_concurrent_analyses` | int | 1-3 | Simultaneous VMAF analyses for SmartShrink |
 | `pushover_user_key` | string | | Pushover user key |
 | `pushover_app_token` | string | | Pushover app token |
 | `notify_on_complete` | bool | | Enable completion notification |
@@ -145,6 +147,7 @@ Send a test notification to verify Pushover credentials.
 
 - Changes are persisted to `/config/shrinkray.yaml`
 - Worker count changes take effect immediately (running jobs complete normally)
+- VMAF analyses run with low CPU priority (`nice -n 19`) and limited threads to avoid saturating the system
 - Some settings (`media_path`, `temp_path`, `keep_larger_files`, `allow_same_codec`) can only be changed in the config file
 - Quality value of 0 means "use encoder-specific default"
 - `allow_same_codec: true` enables HEVC→HEVC or AV1→AV1 re-encoding for bitrate optimization
