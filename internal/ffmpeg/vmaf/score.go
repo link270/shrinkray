@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os/exec"
 	"regexp"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
@@ -12,19 +13,49 @@ import (
 	"github.com/gwlsn/shrinkray/internal/logger"
 )
 
+// SetMaxConcurrentAnalyses logs the configured concurrent analysis limit.
+// Thread count per analysis is fixed at ~50% CPU (numCPU/2) regardless of this setting.
+// Multiple concurrent analyses can stack to use more total CPU.
+func SetMaxConcurrentAnalyses(n int) {
+	if n < 1 {
+		n = 1
+	}
+	if n > 3 {
+		n = 3
+	}
+	logger.Info("VMAF concurrent analyses configured", "max_analyses", n, "threads_per_analysis", GetThreadCount())
+}
+
+// GetThreadCount returns the number of threads each VMAF process should use.
+// Uses numCPU/2 to limit decoders and filters to ~50% CPU.
+// Note: Software encoders (x265, svtav1) ignore this and use all cores.
+func GetThreadCount() int {
+	numThreads := runtime.NumCPU() / 2
+	if numThreads < 1 {
+		numThreads = 1
+	}
+	return numThreads
+}
+
 // Score calculates the VMAF score between reference and distorted videos
 func Score(ctx context.Context, ffmpegPath, referencePath, distortedPath string, height int) (float64, error) {
 	model := SelectModel(height)
+
+	// Get thread count based on configured max concurrent analyses
+	// This targets ~50% total CPU usage across all concurrent VMAF processes
+	numThreads := GetThreadCount()
 
 	// Build VMAF filter
 	// Input order: [0:v] = distorted (encoded), [1:v] = reference (original)
 	// libvmaf compares distorted against reference
 	// Use /dev/stdout for log_path as some FFmpeg builds don't support "-"
-	vmafFilter := fmt.Sprintf("[0:v][1:v]libvmaf=model=version=%s:log_fmt=json:log_path=/dev/stdout", model)
+	vmafFilter := fmt.Sprintf("[0:v][1:v]libvmaf=model=version=%s:n_threads=%d:log_fmt=json:log_path=/dev/stdout", model, numThreads)
 
 	args := []string{
-		"-i", distortedPath, // Input 0: distorted/encoded sample
-		"-i", referencePath, // Input 1: reference/original sample
+		"-threads", fmt.Sprintf("%d", numThreads),        // Limit decoder threads
+		"-filter_threads", fmt.Sprintf("%d", numThreads), // Limit filter graph threads
+		"-i", distortedPath,                              // Input 0: distorted/encoded sample
+		"-i", referencePath,                              // Input 1: reference/original sample
 		"-filter_complex", vmafFilter,
 		"-f", "null", "-",
 	}

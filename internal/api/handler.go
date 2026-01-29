@@ -333,9 +333,10 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		"schedule_enabled":      h.cfg.ScheduleEnabled,
 		"schedule_start_hour":   h.cfg.ScheduleStartHour,
 		"schedule_end_hour":     h.cfg.ScheduleEndHour,
-		"output_format":         h.cfg.OutputFormat,
-		"tonemap_hdr":           h.cfg.TonemapHDR,
-		"tonemap_algorithm":     h.cfg.TonemapAlgorithm,
+		"output_format":             h.cfg.OutputFormat,
+		"tonemap_hdr":               h.cfg.TonemapHDR,
+		"tonemap_algorithm":         h.cfg.TonemapAlgorithm,
+		"max_concurrent_analyses":   h.cfg.MaxConcurrentAnalyses,
 	})
 }
 
@@ -351,9 +352,10 @@ type UpdateConfigRequest struct {
 	ScheduleEnabled    *bool   `json:"schedule_enabled,omitempty"`
 	ScheduleStartHour  *int    `json:"schedule_start_hour,omitempty"`
 	ScheduleEndHour    *int    `json:"schedule_end_hour,omitempty"`
-	OutputFormat     *string `json:"output_format,omitempty"`
-	TonemapHDR       *bool   `json:"tonemap_hdr,omitempty"`
-	TonemapAlgorithm *string `json:"tonemap_algorithm,omitempty"`
+	OutputFormat            *string `json:"output_format,omitempty"`
+	TonemapHDR              *bool   `json:"tonemap_hdr,omitempty"`
+	TonemapAlgorithm        *string `json:"tonemap_algorithm,omitempty"`
+	MaxConcurrentAnalyses   *int    `json:"max_concurrent_analyses,omitempty"`
 }
 
 // UpdateConfig handles PUT /api/config
@@ -452,6 +454,19 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "tonemap_algorithm must be one of: hable, bt2390, reinhard, mobius, clip, linear, gamma")
 			return
 		}
+	}
+
+	// Handle max concurrent analyses (SmartShrink VMAF)
+	if req.MaxConcurrentAnalyses != nil {
+		val := *req.MaxConcurrentAnalyses
+		if val < 1 || val > 3 {
+			writeError(w, http.StatusBadRequest, "max_concurrent_analyses must be between 1 and 3")
+			return
+		}
+		h.cfg.MaxConcurrentAnalyses = val
+		// Update the worker pool's analysis limit and VMAF thread calculation
+		h.workerPool.SetAnalysisLimit(val)
+		vmaf.SetMaxConcurrentAnalyses(val)
 	}
 
 	// Persist config to disk

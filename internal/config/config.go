@@ -79,6 +79,12 @@ type Config struct {
 	// TonemapAlgorithm is the tonemapping algorithm to use: "hable", "bt2390", "reinhard"
 	// Default is "hable" (filmic, good for movies)
 	TonemapAlgorithm string `yaml:"tonemap_algorithm"`
+
+	// MaxConcurrentAnalyses limits how many SmartShrink VMAF analyses can run simultaneously.
+	// VMAF analysis is CPU-intensive and cannot be hardware accelerated.
+	// Default is 1 to avoid high CPU usage on media servers.
+	// Range: 1-3
+	MaxConcurrentAnalyses int `yaml:"max_concurrent_analyses"`
 }
 
 // DefaultConfig returns a config with sensible defaults
@@ -98,8 +104,9 @@ func DefaultConfig() *Config {
 		ScheduleEndHour:   6,  // 6 AM
 		LogLevel:          "info",
 		OutputFormat:      "mkv",
-		TonemapHDR:        false,   // HDR passthrough by default; enable for SDR conversion (uses CPU)
-		TonemapAlgorithm:  "hable", // Filmic tonemapping, good for movies
+		TonemapHDR:            false,   // HDR passthrough by default; enable for SDR conversion (uses CPU)
+		TonemapAlgorithm:      "hable", // Filmic tonemapping, good for movies
+		MaxConcurrentAnalyses: 1,       // Conservative default for media servers
 	}
 }
 
@@ -155,6 +162,14 @@ func Load(path string) (*Config, error) {
 	default:
 		// Unknown algorithm - fall back to hable
 		cfg.TonemapAlgorithm = "hable"
+	}
+
+	// Validate max concurrent analyses (1-3)
+	if cfg.MaxConcurrentAnalyses < 1 {
+		cfg.MaxConcurrentAnalyses = 1
+	}
+	if cfg.MaxConcurrentAnalyses > 3 {
+		cfg.MaxConcurrentAnalyses = 3
 	}
 
 	return cfg, nil

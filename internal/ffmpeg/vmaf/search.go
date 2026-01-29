@@ -3,6 +3,7 @@ package vmaf
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/gwlsn/shrinkray/internal/logger"
 )
@@ -54,6 +55,7 @@ func binarySearchCRF(ctx context.Context, ffmpegPath string, referenceSamples []
 		mid := (low + high) / 2
 
 		// Encode all samples at this quality
+		encodeStart := time.Now()
 		distortedSamples := make([]*Sample, 0, len(referenceSamples))
 		for i, ref := range referenceSamples {
 			distPath, err := encodeSample(ctx, ref.Path, mid, 0)
@@ -62,9 +64,12 @@ func binarySearchCRF(ctx context.Context, ffmpegPath string, referenceSamples []
 			}
 			distortedSamples = append(distortedSamples, &Sample{Path: distPath})
 		}
+		encodeDuration := time.Since(encodeStart)
 
 		// Score samples
+		scoreStart := time.Now()
 		minScore, err := ScoreSamples(ctx, ffmpegPath, referenceSamples, distortedSamples, height)
+		scoreDuration := time.Since(scoreStart)
 
 		// Cleanup encoded samples
 		CleanupSamples(distortedSamples)
@@ -76,7 +81,9 @@ func binarySearchCRF(ctx context.Context, ffmpegPath string, referenceSamples []
 		logger.Info("VMAF search iteration",
 			"crf", mid,
 			"vmaf", fmt.Sprintf("%.2f", minScore),
-			"threshold", threshold)
+			"threshold", threshold,
+			"encode_time", encodeDuration.String(),
+			"score_time", scoreDuration.String())
 
 		if minScore >= threshold {
 			// Quality is acceptable, try more compression

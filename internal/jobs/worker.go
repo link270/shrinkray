@@ -56,10 +56,11 @@ type WorkerPool struct {
 	paused   bool
 	pausedMu sync.RWMutex
 
-	// Dynamic semaphore for VMAF analysis - matches worker count
+	// Semaphore for VMAF analysis - configurable independently of worker count
+	// VMAF is CPU-intensive so we limit concurrent analyses to control CPU usage
 	analysisMu    sync.Mutex
 	analysisCount int // Currently running analyses
-	analysisLimit int // Max concurrent analyses (= worker count)
+	analysisLimit int // Max concurrent analyses (from config, 1-3)
 }
 
 // SmartShrink quality thresholds (hardcoded for simplicity)
@@ -85,10 +86,16 @@ func getSmartShrinkThreshold(quality string) float64 {
 func NewWorkerPool(queue *Queue, cfg *config.Config, invalidateCache CacheInvalidator) *WorkerPool {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Ensure analysis limit is at least 1 to prevent infinite wait
-	analysisLimit := cfg.Workers
+	// Use configured limit for concurrent VMAF analyses.
+	// VMAF scoring is CPU-intensive (libvmaf cannot be hardware accelerated).
+	// Each analysis uses ~50% of CPU cores, so multiple concurrent analyses
+	// can saturate the CPU. Default is 1 for media server friendliness.
+	analysisLimit := cfg.MaxConcurrentAnalyses
 	if analysisLimit < 1 {
 		analysisLimit = 1
+	}
+	if analysisLimit > 3 {
+		analysisLimit = 3
 	}
 
 	pool := &WorkerPool{
@@ -253,11 +260,35 @@ func (p *WorkerPool) Resize(n int) {
 
 	// Update config
 	p.cfg.Workers = n
+}
 
-	// Update analysis limit (waiting workers will see new limit on next poll)
+// SetAnalysisLimit updates the maximum concurrent VMAF analyses.
+// This is independent of worker count since VMAF is CPU-intensive.
+// Unlike worker resize, running analyses are NOT cancelled - they complete
+// and the new limit takes effect for subsequent analyses.
+func (p *WorkerPool) SetAnalysisLimit(n int) {
+	if n < 1 {
+		n = 1
+	}
+	if n > 3 {
+		n = 3
+	}
+
 	p.analysisMu.Lock()
+	old := p.analysisLimit
 	p.analysisLimit = n
+	current := p.analysisCount
 	p.analysisMu.Unlock()
+
+	// Update config
+	p.cfg.MaxConcurrentAnalyses = n
+
+	if old != n {
+		logger.Info("Analysis limit changed",
+			"old", old,
+			"new", n,
+			"currently_running", current)
+	}
 }
 
 // WorkerCount returns the current number of workers
@@ -713,7 +744,10 @@ func shouldRetryWithSoftwareDecode(encoder ffmpeg.HWAccel) bool {
 // runSmartShrinkAnalysis performs VMAF analysis and returns the optimal quality settings.
 // Returns (shouldSkip, skipReason, selectedCRF, qualityMod, vmafScore, error)
 func (wp *WorkerPool) runSmartShrinkAnalysis(ctx context.Context, job *Job, preset *ffmpeg.Preset) (bool, string, int, float64, float64, error) {
-	// Acquire analysis slot (limited to worker count for parallel analysis)
+	// Update phase immediately so UI shows "Analyzing" while waiting for slot
+	_ = wp.queue.UpdateJobPhase(job.ID, PhaseAnalyzing)
+
+	// Acquire analysis slot (limited to prevent CPU saturation from concurrent VMAF)
 	for {
 		wp.analysisMu.Lock()
 		if wp.analysisCount < wp.analysisLimit {
@@ -737,9 +771,6 @@ func (wp *WorkerPool) runSmartShrinkAnalysis(ctx context.Context, job *Job, pres
 		wp.analysisCount--
 		wp.analysisMu.Unlock()
 	}()
-
-	// Update phase
-	_ = wp.queue.UpdateJobPhase(job.ID, PhaseAnalyzing)
 
 	// Check HDR without tonemap
 	if job.IsHDR && !wp.cfg.TonemapHDR {
@@ -787,7 +818,11 @@ func (wp *WorkerPool) runSmartShrinkAnalysis(ctx context.Context, job *Job, pres
 
 		outputPath := samplePath + ".encoded.mkv"
 
-		args := make([]string, 0, len(inputArgs)+len(outputArgs)+4)
+		// Limit threads for consistent CPU usage (~50% per analysis)
+		numThreads := vmaf.GetThreadCount()
+		args := make([]string, 0, len(inputArgs)+len(outputArgs)+8)
+		args = append(args, "-threads", fmt.Sprintf("%d", numThreads))
+		args = append(args, "-filter_threads", fmt.Sprintf("%d", numThreads))
 		args = append(args, inputArgs...)
 		args = append(args, "-i", samplePath)
 		args = append(args, outputArgs...)

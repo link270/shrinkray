@@ -74,7 +74,11 @@ func ExtractSamples(ctx context.Context, ffmpegPath, inputPath, tempDir string,
 		samplePath := filepath.Join(tempDir, fmt.Sprintf("sample_%d.mkv", i))
 
 		// Build FFmpeg args for sample extraction
+		// Limit threads to match VMAF scoring for consistent CPU usage
+		numThreads := GetThreadCount()
 		args := []string{
+			"-threads", fmt.Sprintf("%d", numThreads),
+			"-filter_threads", fmt.Sprintf("%d", numThreads),
 			"-ss", fmt.Sprintf("%.3f", startTime.Seconds()),
 			"-i", inputPath,
 			"-t", fmt.Sprintf("%d", SampleDuration),

@@ -126,6 +126,9 @@ func main() {
 	// Logging deferred until after splash screen
 	vmaf.DetectVMAF(cfg.FFmpegPath)
 
+	// Configure VMAF thread limits based on max concurrent analyses setting
+	vmaf.SetMaxConcurrentAnalyses(cfg.MaxConcurrentAnalyses)
+
 	// Initialize presets (depends on encoder AND VMAF detection)
 	ffmpeg.InitPresets()
 
