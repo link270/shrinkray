@@ -47,12 +47,12 @@ func FilterMKVCompatible(streams []SubtitleStream) (compatibleIndices []int, dro
 	for _, s := range streams {
 		if IsMKVCompatible(s.CodecName) {
 			compatibleIndices = append(compatibleIndices, s.Index)
-		} else {
-			// De-duplicate dropped codecs for cleaner log output
-			if !seenCodecs[s.CodecName] {
-				seenCodecs[s.CodecName] = true
-				droppedCodecs = append(droppedCodecs, s.CodecName)
-			}
+			continue
+		}
+		// De-duplicate dropped codecs for cleaner log output
+		if !seenCodecs[s.CodecName] {
+			seenCodecs[s.CodecName] = true
+			droppedCodecs = append(droppedCodecs, s.CodecName)
 		}
 	}
 	return compatibleIndices, droppedCodecs

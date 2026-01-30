@@ -189,10 +189,10 @@ func (p *Prober) ProbeSubtitles(ctx context.Context, path string) ([]SubtitleStr
 	// Since we used -select_streams s, all returned streams are subtitles.
 	// No need to filter by CodecType (which could be empty in some ffprobe versions).
 	var subtitles []SubtitleStream
-	for _, stream := range probeOutput.Streams {
+	for i := range probeOutput.Streams {
 		subtitles = append(subtitles, SubtitleStream{
-			Index:     stream.Index,
-			CodecName: stream.CodecName,
+			Index:     probeOutput.Streams[i].Index,
+			CodecName: probeOutput.Streams[i].CodecName,
 		})
 	}
 
