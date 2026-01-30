@@ -13,9 +13,26 @@ import (
 	"time"
 )
 
+// requireFFprobe skips the test if ffprobe is not available
+func requireFFprobe(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("ffprobe"); err != nil {
+		t.Skip("ffprobe not found in PATH, skipping integration test")
+	}
+}
+
+// requireFFmpeg skips the test if ffmpeg is not available
+func requireFFmpeg(t *testing.T) {
+	t.Helper()
+	if _, err := exec.LookPath("ffmpeg"); err != nil {
+		t.Skip("ffmpeg not found in PATH, skipping integration test")
+	}
+}
+
 // TestSubtitleFiltering_MovText verifies that mov_text subtitles are filtered out
 // and the transcode succeeds (previously failed with "Subtitle codec 94213 is not supported")
 func TestSubtitleFiltering_MovText(t *testing.T) {
+	requireFFprobe(t)
 	testFile := filepath.Join(getTestdataPath(), "test_mov_text_subs.mp4")
 	if _, err := os.Stat(testFile); os.IsNotExist(err) {
 		t.Skipf("test file not found: %s (run generate script or create manually)", testFile)
@@ -86,6 +103,7 @@ func TestSubtitleFiltering_MovText(t *testing.T) {
 
 // TestSubtitleFiltering_Compatible verifies that compatible subtitles are preserved
 func TestSubtitleFiltering_Compatible(t *testing.T) {
+	requireFFprobe(t)
 	testFile := filepath.Join(getTestdataPath(), "comp_h264_subtitles.mkv")
 	if _, err := os.Stat(testFile); os.IsNotExist(err) {
 		t.Skipf("test file not found: %s", testFile)
@@ -126,6 +144,9 @@ func TestSubtitleFiltering_Compatible(t *testing.T) {
 
 // TestSubtitleFiltering_EndToEnd performs an actual transcode with filtering
 func TestSubtitleFiltering_EndToEnd(t *testing.T) {
+	requireFFprobe(t)
+	requireFFmpeg(t)
+
 	if testing.Short() {
 		t.Skip("skipping end-to-end test in short mode")
 	}

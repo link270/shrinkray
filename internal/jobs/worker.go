@@ -713,14 +713,21 @@ func (w *Worker) processJob(job *Job) {
 		)
 	}
 
-	// For MKV output, filter incompatible subtitle codecs to avoid muxing failures
+	// For MKV output, filter incompatible subtitle codecs to avoid muxing failures.
+	// Only applies to MKV - other formats (mp4, webm, etc.) have different rules.
 	var subtitleIndices []int // nil = map all (default)
-	if w.cfg.OutputFormat != "mp4" {
-		subtitleStreams, err := w.prober.ProbeSubtitles(jobCtx, job.InputPath)
+	if w.cfg.OutputFormat == "mkv" {
+		// Use a short timeout for subtitle probing to avoid stalling the job
+		probeCtx, probeCancel := context.WithTimeout(jobCtx, 10*time.Second)
+		subtitleStreams, err := w.prober.ProbeSubtitles(probeCtx, job.InputPath)
+		probeCancel()
+
 		if err != nil {
 			logger.Warn("Failed to probe subtitles, using default mapping",
 				"job_id", job.ID, "error", err)
-			// subtitleIndices stays nil = map all (fallback to current behavior)
+			// subtitleIndices stays nil = map all (fallback to prior behavior).
+			// This preserves subtitles if probe fails, but may still fail on
+			// incompatible codecs. Better than silently dropping all subtitles.
 		} else if len(subtitleStreams) > 0 {
 			compatible, dropped := ffmpeg.FilterMKVCompatible(subtitleStreams)
 			if len(dropped) > 0 {
