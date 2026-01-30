@@ -54,7 +54,7 @@ Open `http://localhost:8080` in your browser.
 ### Where are config and data stored?
 
 - **Config file**: `/config/shrinkray.yaml`
-- **Job queue**: `/config/queue.json`
+- **Database**: `/config/shrinkray.db` (SQLite)
 - **Temp files**: Same directory as source (configurable via `temp_path`)
 
 ---
@@ -132,6 +132,12 @@ At startup, Shrinkray:
 3. Selects the first working encoder in priority order: VideoToolbox > NVENC > QSV > VAAPI > Software
 
 Check the logs at startup to see which encoders were detected. The active encoder is marked with an asterisk.
+
+### What happens if hardware encoding fails mid-job?
+
+Shrinkray automatically tries the next available encoder. For example, if Quick Sync fails on a specific file, it falls back to VAAPI, then to software encoding. This fallback chain means jobs complete even when specific hardware encoders have issues with certain content.
+
+The fallback happens per-job, not globally—other jobs still try the preferred encoder first.
 
 ### How do I verify GPU acceleration is working?
 
@@ -332,7 +338,7 @@ Docker logs will include FFmpeg stderr output for each job.
 
 ### Jobs disappear after restart
 
-Jobs are persisted to `/config/queue.json`. Ensure:
+Jobs are persisted to `/config/shrinkray.db` (SQLite). Ensure:
 - The `/config` volume is mounted correctly
 - Container has write permission to the directory
 

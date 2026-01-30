@@ -42,6 +42,32 @@ flowchart TB
 
 Detection works by attempting a 1-frame test encode with each encoder. The first successful encoder in priority order is selected.
 
+## Encoder fallback
+
+If the primary encoder fails during a job (e.g., unsupported filter, driver issue), Shrinkray automatically retries with the next available encoder:
+
+```mermaid
+flowchart LR
+    Start[Job Start] --> Primary[Try Primary Encoder]
+    Primary -->|Success| Done[Complete]
+    Primary -->|Fail| Fallback1[Try Next Encoder]
+    Fallback1 -->|Success| Done
+    Fallback1 -->|Fail| Fallback2[Try Software]
+    Fallback2 -->|Success| Done
+    Fallback2 -->|Fail| Failed[Job Failed]
+
+    style Start fill:#3a4a5f,stroke:#8ab4ff
+    style Done fill:#2d4a3e,stroke:#6bcf8e
+    style Failed fill:#5f3a3a,stroke:#ff8a8a
+    style Primary fill:#3a4a5f,stroke:#8ab4ff
+    style Fallback1 fill:#5f4a3a,stroke:#ffb88a
+    style Fallback2 fill:#5f4a3a,stroke:#ffb88a
+```
+
+Example fallback chain for Intel systems: Quick Sync → VAAPI → Software
+
+This ensures jobs complete even when specific encoders fail on certain content. The fallback is per-job—subsequent jobs still attempt the primary encoder first.
+
 ## Encoder priority
 
 | Priority | Encoder | Platform | Why |

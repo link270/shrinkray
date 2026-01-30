@@ -112,7 +112,7 @@ By default (MKV output), audio and subtitles are copied unchanged. MP4 output mo
 
 ## Hardware Acceleration
 
-Shrinkray automatically detects and uses the best available hardware encoder. No configuration required, just pass through your GPU.
+Shrinkray automatically detects and uses the best available hardware encoder. No configuration required, just pass through your GPU. If hardware encoding fails mid-job, Shrinkray automatically falls back to the next available encoder (e.g., Quick Sync → VAAPI → Software).
 
 ### Supported Hardware
 
@@ -177,6 +177,7 @@ Configuration is stored in `/config/shrinkray.yaml`. Most settings are available
 | `output_format` | `mkv` | Output container: `mkv` (preserves all streams) or `mp4` (web compatible) |
 | `tonemap_hdr` | `false` | Convert HDR content to SDR (uses CPU tonemapping) |
 | `tonemap_algorithm` | `hable` | Tonemapping algorithm: `hable`, `bt2390`, `reinhard`, `mobius` |
+| `max_concurrent_analyses` | `1` | Simultaneous SmartShrink VMAF analyses (1–3) |
 
 ### Example Configuration
 
