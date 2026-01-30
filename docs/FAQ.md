@@ -247,8 +247,10 @@ To always keep outputs (for codec consistency across your library), set `keep_la
 
 | Format | Audio | Subtitles |
 |--------|-------|-----------|
-| **MKV** (default) | Copied unchanged | Copied unchanged |
+| **MKV** (default) | Copied unchanged | Compatible codecs preserved* |
 | **MP4** | Transcoded to AAC stereo | Stripped (PGS incompatible) |
+
+*MKV preserves most subtitle formats (srt, ass, ssa, pgs, dvb). Some MP4/TS-specific formats (mov_text, eia_608) are automatically filtered with a warning since they're incompatible with MKV containers.
 
 ### How does Shrinkray handle HDR content?
 

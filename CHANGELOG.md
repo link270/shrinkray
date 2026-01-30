@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.4] - 2026-01-30
+
+### Fixed
+- **MKV subtitle compatibility filtering** (#77)
+  - Transcoding MP4/TS files with `mov_text` subtitles to MKV no longer fails
+  - Subtitle streams are probed before transcoding; incompatible codecs are automatically filtered
+  - Compatible codecs (srt, ass, ssa, subrip, webvtt, dvb_subtitle, hdmv_pgs) are preserved
+  - Incompatible codecs (mov_text, eia_608, tx3g, ttml, dvb_teletext) are dropped with a warning log
+  - Graceful fallback: if subtitle probing fails, transcoding proceeds with default behavior
+
 ## [2.0.3] - 2026-01-30
 
 ### Added
