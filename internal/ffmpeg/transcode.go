@@ -109,7 +109,9 @@ func (t *Transcoder) Transcode(
 
 	// Build preset args with source bitrate for dynamic calculation
 	// inputArgs go before -i (hwaccel), outputArgs go after
-	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, sourceWidth, sourceHeight, qualityHEVC, qualityAV1, qualityMod, softwareDecode, outputFormat, tonemap)
+	// Pass nil for subtitleIndices to map all subtitles (default behavior)
+	// The worker will pass filtered indices for MKV output
+	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, sourceWidth, sourceHeight, qualityHEVC, qualityAV1, qualityMod, softwareDecode, outputFormat, tonemap, nil)
 
 	// Build ffmpeg command
 	// Structure: ffmpeg [inputArgs] -i input [outputArgs] output
