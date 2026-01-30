@@ -127,7 +127,8 @@ func main() {
 	vmaf.DetectVMAF(cfg.FFmpegPath)
 
 	// Configure VMAF thread limits based on max concurrent analyses setting
-	vmaf.SetMaxConcurrentAnalyses(cfg.MaxConcurrentAnalyses)
+	clampedMaxAnalyses := vmaf.SetMaxConcurrentAnalyses(cfg.MaxConcurrentAnalyses)
+	cfg.MaxConcurrentAnalyses = clampedMaxAnalyses
 
 	// Initialize presets (depends on encoder AND VMAF detection)
 	ffmpeg.InitPresets()
@@ -180,6 +181,7 @@ func main() {
 	logger.Info("Shrinkray started", "version", shrinkray.Version, "encoder", best.Name, "workers", cfg.Workers, "port", *port)
 	if vmaf.IsAvailable() {
 		logger.Info("VMAF support detected", "models", vmaf.GetModels())
+		logger.Info("VMAF concurrent analyses configured", "max_analyses", clampedMaxAnalyses, "threads_per_analysis", vmaf.GetThreadCount())
 	} else {
 		logger.Info("VMAF not available - SmartShrink presets will be hidden")
 	}

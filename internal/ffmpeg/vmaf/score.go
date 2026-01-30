@@ -13,17 +13,18 @@ import (
 	"github.com/gwlsn/shrinkray/internal/logger"
 )
 
-// SetMaxConcurrentAnalyses logs the configured concurrent analysis limit.
+// SetMaxConcurrentAnalyses configures the concurrent analysis limit and returns the clamped value.
 // Thread count per analysis is fixed at ~50% CPU (numCPU/2) regardless of this setting.
 // Multiple concurrent analyses can stack to use more total CPU.
-func SetMaxConcurrentAnalyses(n int) {
+// Note: This currently only validates/clamps the value; actual limiting happens elsewhere.
+func SetMaxConcurrentAnalyses(n int) int {
 	if n < 1 {
 		n = 1
 	}
 	if n > 3 {
 		n = 3
 	}
-	logger.Info("VMAF concurrent analyses configured", "max_analyses", n, "threads_per_analysis", GetThreadCount())
+	return n
 }
 
 // GetThreadCount returns the number of threads each VMAF process should use.

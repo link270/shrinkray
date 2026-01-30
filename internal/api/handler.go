@@ -463,10 +463,10 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, "max_concurrent_analyses must be between 1 and 3")
 			return
 		}
+		val = vmaf.SetMaxConcurrentAnalyses(val)
 		h.cfg.MaxConcurrentAnalyses = val
 		// Update the worker pool's analysis limit and VMAF thread calculation
 		h.workerPool.SetAnalysisLimit(val)
-		vmaf.SetMaxConcurrentAnalyses(val)
 	}
 
 	// Persist config to disk
