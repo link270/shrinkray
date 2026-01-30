@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.3] - 2026-01-30
+
+### Added
+- **Same-codec re-encoding setting in UI** (#80)
+  - New toggle in Transcoding settings to allow HEVC→HEVC or AV1→AV1 re-encoding
+  - Useful for re-optimizing files encoded elsewhere with suboptimal settings
+  - Previously only configurable via config file
+
+### Changed
+- SmartShrink presets now respect `allow_same_codec` setting
+  - When disabled (default), SmartShrink skips files already in target codec
+  - When enabled, SmartShrink will re-analyze and potentially re-encode for better compression
+
 ## [2.0.2] - 2026-01-30
 
 ### Added

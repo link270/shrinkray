@@ -570,14 +570,13 @@ func TestBuildPresetArgsHDRFilters(t *testing.T) {
 
 func TestPreset_WithEncoder(t *testing.T) {
 	original := &Preset{
-		ID:              "test-preset",
-		Name:            "Test Preset",
-		Description:     "A test preset for unit testing",
-		Encoder:         HWAccelNVENC,
-		Codec:           CodecHEVC,
-		MaxHeight:       1080,
-		IsSmartShrink:   true,
-		SkipsCodecCheck: true,
+		ID:            "test-preset",
+		Name:          "Test Preset",
+		Description:   "A test preset for unit testing",
+		Encoder:       HWAccelNVENC,
+		Codec:         CodecHEVC,
+		MaxHeight:     1080,
+		IsSmartShrink: true,
 	}
 
 	modified := original.WithEncoder(HWAccelVAAPI)
@@ -605,9 +604,6 @@ func TestPreset_WithEncoder(t *testing.T) {
 	}
 	if modified.IsSmartShrink != original.IsSmartShrink {
 		t.Errorf("IsSmartShrink not preserved: got %v, want %v", modified.IsSmartShrink, original.IsSmartShrink)
-	}
-	if modified.SkipsCodecCheck != original.SkipsCodecCheck {
-		t.Errorf("SkipsCodecCheck not preserved: got %v, want %v", modified.SkipsCodecCheck, original.SkipsCodecCheck)
 	}
 
 	// Original should be unchanged

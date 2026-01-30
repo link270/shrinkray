@@ -317,45 +317,47 @@ func (h *Handler) GetConfig(w http.ResponseWriter, r *http.Request) {
 
 	// Return a sanitized config (no sensitive paths exposed)
 	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"version":               shrinkray.Version,
-		"media_path":            h.cfg.MediaPath,
-		"original_handling":     h.cfg.OriginalHandling,
-		"workers":               h.cfg.Workers,
-		"has_temp_path":         h.cfg.TempPath != "",
-		"pushover_user_key":     h.cfg.PushoverUserKey,
-		"pushover_app_token":    h.cfg.PushoverAppToken,
-		"pushover_configured":   h.pushover.IsConfigured(),
-		"notify_on_complete":    h.cfg.NotifyOnComplete,
-		"quality_hevc":          h.cfg.QualityHEVC,
-		"quality_av1":           h.cfg.QualityAV1,
-		"default_quality_hevc":  defaultHEVC,
-		"default_quality_av1":   defaultAV1,
-		"schedule_enabled":      h.cfg.ScheduleEnabled,
-		"schedule_start_hour":   h.cfg.ScheduleStartHour,
-		"schedule_end_hour":     h.cfg.ScheduleEndHour,
-		"output_format":             h.cfg.OutputFormat,
-		"tonemap_hdr":               h.cfg.TonemapHDR,
-		"tonemap_algorithm":         h.cfg.TonemapAlgorithm,
-		"max_concurrent_analyses":   h.cfg.MaxConcurrentAnalyses,
+		"version":                 shrinkray.Version,
+		"media_path":              h.cfg.MediaPath,
+		"original_handling":       h.cfg.OriginalHandling,
+		"workers":                 h.cfg.Workers,
+		"has_temp_path":           h.cfg.TempPath != "",
+		"pushover_user_key":       h.cfg.PushoverUserKey,
+		"pushover_app_token":      h.cfg.PushoverAppToken,
+		"pushover_configured":     h.pushover.IsConfigured(),
+		"notify_on_complete":      h.cfg.NotifyOnComplete,
+		"quality_hevc":            h.cfg.QualityHEVC,
+		"quality_av1":             h.cfg.QualityAV1,
+		"default_quality_hevc":    defaultHEVC,
+		"default_quality_av1":     defaultAV1,
+		"schedule_enabled":        h.cfg.ScheduleEnabled,
+		"schedule_start_hour":     h.cfg.ScheduleStartHour,
+		"schedule_end_hour":       h.cfg.ScheduleEndHour,
+		"output_format":           h.cfg.OutputFormat,
+		"tonemap_hdr":             h.cfg.TonemapHDR,
+		"tonemap_algorithm":       h.cfg.TonemapAlgorithm,
+		"max_concurrent_analyses": h.cfg.MaxConcurrentAnalyses,
+		"allow_same_codec":        h.cfg.AllowSameCodec,
 	})
 }
 
 // UpdateConfigRequest is the request body for updating config
 type UpdateConfigRequest struct {
-	OriginalHandling   *string `json:"original_handling,omitempty"`
-	Workers            *int    `json:"workers,omitempty"`
-	PushoverUserKey    *string `json:"pushover_user_key,omitempty"`
-	PushoverAppToken   *string `json:"pushover_app_token,omitempty"`
-	NotifyOnComplete   *bool   `json:"notify_on_complete,omitempty"`
-	QualityHEVC        *int    `json:"quality_hevc,omitempty"`
-	QualityAV1         *int    `json:"quality_av1,omitempty"`
-	ScheduleEnabled    *bool   `json:"schedule_enabled,omitempty"`
-	ScheduleStartHour  *int    `json:"schedule_start_hour,omitempty"`
-	ScheduleEndHour    *int    `json:"schedule_end_hour,omitempty"`
-	OutputFormat            *string `json:"output_format,omitempty"`
-	TonemapHDR              *bool   `json:"tonemap_hdr,omitempty"`
-	TonemapAlgorithm        *string `json:"tonemap_algorithm,omitempty"`
-	MaxConcurrentAnalyses   *int    `json:"max_concurrent_analyses,omitempty"`
+	OriginalHandling      *string `json:"original_handling,omitempty"`
+	Workers               *int    `json:"workers,omitempty"`
+	PushoverUserKey       *string `json:"pushover_user_key,omitempty"`
+	PushoverAppToken      *string `json:"pushover_app_token,omitempty"`
+	NotifyOnComplete      *bool   `json:"notify_on_complete,omitempty"`
+	QualityHEVC           *int    `json:"quality_hevc,omitempty"`
+	QualityAV1            *int    `json:"quality_av1,omitempty"`
+	ScheduleEnabled       *bool   `json:"schedule_enabled,omitempty"`
+	ScheduleStartHour     *int    `json:"schedule_start_hour,omitempty"`
+	ScheduleEndHour       *int    `json:"schedule_end_hour,omitempty"`
+	OutputFormat          *string `json:"output_format,omitempty"`
+	TonemapHDR            *bool   `json:"tonemap_hdr,omitempty"`
+	TonemapAlgorithm      *string `json:"tonemap_algorithm,omitempty"`
+	MaxConcurrentAnalyses *int    `json:"max_concurrent_analyses,omitempty"`
+	AllowSameCodec        *bool   `json:"allow_same_codec,omitempty"`
 }
 
 // UpdateConfig handles PUT /api/config
@@ -467,6 +469,12 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		h.cfg.MaxConcurrentAnalyses = val
 		// Update the worker pool's analysis limit and VMAF thread calculation
 		h.workerPool.SetAnalysisLimit(val)
+	}
+
+	// Handle allow same codec (re-encode HEVC→HEVC or AV1→AV1)
+	if req.AllowSameCodec != nil {
+		h.cfg.AllowSameCodec = *req.AllowSameCodec
+		h.queue.SetAllowSameCodec(*req.AllowSameCodec)
 	}
 
 	// Persist config to disk

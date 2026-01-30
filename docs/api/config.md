@@ -32,7 +32,8 @@ Returns current configuration with encoder defaults.
   "schedule_end_hour": 6,
   "output_format": "mkv",
   "tonemap_hdr": false,
-  "tonemap_algorithm": "hable"
+  "tonemap_algorithm": "hable",
+  "allow_same_codec": false
 }
 ```
 
@@ -60,6 +61,7 @@ Returns current configuration with encoder defaults.
 | `output_format` | string | Output container: `mkv` or `mp4` |
 | `tonemap_hdr` | bool | Convert HDR to SDR |
 | `tonemap_algorithm` | string | Tonemapping algorithm |
+| `allow_same_codec` | bool | Allow same-codec re-encoding |
 
 ## Update configuration
 
@@ -99,6 +101,7 @@ Update configuration settings. Only include fields you want to change.
 | `output_format` | string | `mkv` or `mp4` | Output container format |
 | `tonemap_hdr` | bool | | Enable HDR to SDR conversion |
 | `tonemap_algorithm` | string | See below | Tonemapping algorithm |
+| `allow_same_codec` | bool | | Allow HEVC→HEVC or AV1→AV1 re-encoding |
 
 ### Tonemapping algorithms
 
@@ -148,6 +151,6 @@ Send a test notification to verify Pushover credentials.
 - Changes are persisted to `/config/shrinkray.yaml`
 - Worker count changes take effect immediately (running jobs complete normally)
 - VMAF analyses run with low CPU priority (`nice -n 19`) and limited threads to avoid saturating the system
-- Some settings (`media_path`, `temp_path`, `keep_larger_files`, `allow_same_codec`) can only be changed in the config file
+- Some settings (`media_path`, `temp_path`, `keep_larger_files`) can only be changed in the config file
 - Quality value of 0 means "use encoder-specific default"
 - `allow_same_codec: true` enables HEVC→HEVC or AV1→AV1 re-encoding for bitrate optimization

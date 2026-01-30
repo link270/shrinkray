@@ -9,14 +9,13 @@ import (
 
 // Preset defines a transcoding preset with its FFmpeg parameters
 type Preset struct {
-	ID              string  `json:"id"`
-	Name            string  `json:"name"`
-	Description     string  `json:"description"`
-	Encoder         HWAccel `json:"encoder"`          // Which encoder to use
-	Codec           Codec   `json:"codec"`            // Target codec (HEVC or AV1)
-	MaxHeight       int     `json:"max_height"`       // 0 = no scaling, 1080, 720, etc.
-	IsSmartShrink   bool    `json:"is_smart_shrink"`  // True for VMAF-based presets
-	SkipsCodecCheck bool    `json:"skips_codec_check"` // Bypass same-codec skip
+	ID            string  `json:"id"`
+	Name          string  `json:"name"`
+	Description   string  `json:"description"`
+	Encoder       HWAccel `json:"encoder"`         // Which encoder to use
+	Codec         Codec   `json:"codec"`           // Target codec (HEVC or AV1)
+	MaxHeight     int     `json:"max_height"`      // 0 = no scaling, 1080, 720, etc.
+	IsSmartShrink bool    `json:"is_smart_shrink"` // True for VMAF-based presets
 }
 
 // WithEncoder returns a copy of the preset with a different encoder.
@@ -186,21 +185,20 @@ var encoderConfigs = map[EncoderKey]encoderSettings{
 
 // BasePresets defines the core presets
 var BasePresets = []struct {
-	ID              string
-	Name            string
-	Description     string
-	Codec           Codec
-	MaxHeight       int
-	IsSmartShrink   bool
-	SkipsCodecCheck bool
+	ID            string
+	Name          string
+	Description   string
+	Codec         Codec
+	MaxHeight     int
+	IsSmartShrink bool
 }{
-	{"compress-hevc", "Compress (HEVC)", "Reduce size with HEVC encoding", CodecHEVC, 0, false, false},
-	{"compress-av1", "Compress (AV1)", "Maximum compression with AV1 encoding", CodecAV1, 0, false, false},
-	{"1080p", "Downscale to 1080p", "Downscale to 1080p max (HEVC)", CodecHEVC, 1080, false, false},
-	{"720p", "Downscale to 720p", "Downscale to 720p (big savings)", CodecHEVC, 720, false, false},
+	{"compress-hevc", "Compress (HEVC)", "Reduce size with HEVC encoding", CodecHEVC, 0, false},
+	{"compress-av1", "Compress (AV1)", "Maximum compression with AV1 encoding", CodecAV1, 0, false},
+	{"1080p", "Downscale to 1080p", "Downscale to 1080p max (HEVC)", CodecHEVC, 1080, false},
+	{"720p", "Downscale to 720p", "Downscale to 720p (big savings)", CodecHEVC, 720, false},
 	// SmartShrink presets - VMAF-based auto-optimization
-	{"smartshrink-hevc", "SmartShrink (HEVC)", "Auto-optimize with VMAF analysis", CodecHEVC, 0, true, true},
-	{"smartshrink-av1", "SmartShrink (AV1)", "Auto-optimize with VMAF analysis", CodecAV1, 0, true, true},
+	{"smartshrink-hevc", "SmartShrink (HEVC)", "Auto-optimize with VMAF analysis", CodecHEVC, 0, true},
+	{"smartshrink-av1", "SmartShrink (AV1)", "Auto-optimize with VMAF analysis", CodecAV1, 0, true},
 }
 
 // GetEncoderDefaults returns the default quality values for a given encoder.
@@ -672,14 +670,13 @@ func GeneratePresets() map[string]*Preset {
 		}
 
 		presets[base.ID] = &Preset{
-			ID:              base.ID,
-			Name:            base.Name + suffix,
-			Description:     base.Description,
-			Encoder:         bestEncoder.Accel,
-			Codec:           base.Codec,
-			MaxHeight:       base.MaxHeight,
-			IsSmartShrink:   base.IsSmartShrink,
-			SkipsCodecCheck: base.SkipsCodecCheck,
+			ID:            base.ID,
+			Name:          base.Name + suffix,
+			Description:   base.Description,
+			Encoder:       bestEncoder.Accel,
+			Codec:         base.Codec,
+			MaxHeight:     base.MaxHeight,
+			IsSmartShrink: base.IsSmartShrink,
 		}
 	}
 
@@ -715,14 +712,13 @@ func getSoftwarePreset(id string) *Preset {
 				return nil
 			}
 			return &Preset{
-				ID:              base.ID,
-				Name:            base.Name + " [SW]",
-				Description:     base.Description,
-				Encoder:         HWAccelNone,
-				Codec:           base.Codec,
-				MaxHeight:       base.MaxHeight,
-				IsSmartShrink:   base.IsSmartShrink,
-				SkipsCodecCheck: base.SkipsCodecCheck,
+				ID:            base.ID,
+				Name:          base.Name + " [SW]",
+				Description:   base.Description,
+				Encoder:       HWAccelNone,
+				Codec:         base.Codec,
+				MaxHeight:     base.MaxHeight,
+				IsSmartShrink: base.IsSmartShrink,
 			}
 		}
 	}
@@ -776,14 +772,13 @@ func ListPresets() []*Preset {
 				continue
 			}
 			presets = append(presets, &Preset{
-				ID:              base.ID,
-				Name:            base.Name + " [SW]",
-				Description:     base.Description,
-				Encoder:         HWAccelNone,
-				Codec:           base.Codec,
-				MaxHeight:       base.MaxHeight,
-				IsSmartShrink:   base.IsSmartShrink,
-				SkipsCodecCheck: base.SkipsCodecCheck,
+				ID:            base.ID,
+				Name:          base.Name + " [SW]",
+				Description:   base.Description,
+				Encoder:       HWAccelNone,
+				Codec:         base.Codec,
+				MaxHeight:     base.MaxHeight,
+				IsSmartShrink: base.IsSmartShrink,
 			})
 		}
 		return presets

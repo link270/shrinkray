@@ -760,4 +760,45 @@ func TestQueueAllowSameCodec(t *testing.T) {
 			t.Errorf("expected AV1 file to be pending, got %s", job.Status)
 		}
 	})
+
+	// Test 5: SmartShrink respects allow_same_codec (Issue #80)
+	t.Run("smartshrink_skip_when_disabled", func(t *testing.T) {
+		queue := jobs.NewQueue()
+		queue.SetAllowSameCodec(false)
+
+		job, _ := queue.Add(hevcProbe.Path, "smartshrink-hevc", hevcProbe, "good")
+		if job.Status != jobs.StatusSkipped {
+			t.Errorf("expected SmartShrink HEVC file to be skipped, got %s", job.Status)
+		}
+	})
+
+	t.Run("smartshrink_allow_when_enabled", func(t *testing.T) {
+		queue := jobs.NewQueue()
+		queue.SetAllowSameCodec(true)
+
+		job, _ := queue.Add(hevcProbe.Path, "smartshrink-hevc", hevcProbe, "good")
+		if job.Status != jobs.StatusPending {
+			t.Errorf("expected SmartShrink HEVC file to be pending, got %s", job.Status)
+		}
+	})
+
+	// Test 6: SmartShrink with non-target codec should always proceed
+	h264Probe := &ffmpeg.ProbeResult{
+		Path:       "/media/h264_file.mkv",
+		Size:       1000000,
+		Duration:   10 * time.Second,
+		VideoCodec: "h264",
+		IsHEVC:     false,
+		IsAV1:      false,
+	}
+
+	t.Run("smartshrink_h264_always_proceeds", func(t *testing.T) {
+		queue := jobs.NewQueue()
+		queue.SetAllowSameCodec(false) // Even with this disabled
+
+		job, _ := queue.Add(h264Probe.Path, "smartshrink-hevc", h264Probe, "good")
+		if job.Status != jobs.StatusPending {
+			t.Errorf("expected H.264 file to be pending for SmartShrink, got %s", job.Status)
+		}
+	})
 }
