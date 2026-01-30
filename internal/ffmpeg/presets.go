@@ -611,9 +611,11 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, sourceWidth, sourceHei
 			// empty = no subtitles to map (all were incompatible)
 			// Don't add any subtitle mapping
 		default:
-			// specific indices = map only compatible streams by absolute index
+			// specific indices = map only compatible streams by absolute stream index
+			// (from ffprobe's stream.index field, not subtitle-relative ordinal)
+			// Use ? suffix for safety in case indices become stale
 			for _, idx := range subtitleIndices {
-				outputArgs = append(outputArgs, "-map", fmt.Sprintf("0:%d", idx))
+				outputArgs = append(outputArgs, "-map", fmt.Sprintf("0:%d?", idx))
 			}
 			outputArgs = append(outputArgs, "-c:s", "copy")
 		}
