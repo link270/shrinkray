@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.2] - 2026-01-30
+
+### Added
+- **Automatic encoder fallback chain** (#77)
+  - If hardware encoder fails mid-job, automatically retries with next available encoder
+  - Fallback order: Quick Sync → VAAPI → Software (varies by platform)
+  - Per-job fallback—subsequent jobs still try preferred encoder first
+  - Improves reliability when specific files trigger encoder issues
+
+### Fixed
+- VMAF concurrent analyses log no longer appears mid-splash screen
+- Goroutine leak when Transcode errors occur before progress monitoring starts
+
 ## [2.0.1] - 2026-01-29
 
 ### Added
