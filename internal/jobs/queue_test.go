@@ -801,4 +801,23 @@ func TestQueueAllowSameCodec(t *testing.T) {
 			t.Errorf("expected H.264 file to be pending for SmartShrink, got %s", job.Status)
 		}
 	})
+
+	// Test 7: Unknown height (0) should not skip downscale presets
+	zeroHeightProbe := &ffmpeg.ProbeResult{
+		Path:       "/media/unknown_height.mkv",
+		Size:       1000000,
+		Duration:   10 * time.Second,
+		VideoCodec: "h264",
+		Height:     0, // Failed probe or audio-only
+		Width:      0,
+	}
+
+	t.Run("downscale_unknown_height_proceeds", func(t *testing.T) {
+		queue := jobs.NewQueue()
+
+		job, _ := queue.Add(zeroHeightProbe.Path, "1080p", zeroHeightProbe, "")
+		if job.Status != jobs.StatusPending {
+			t.Errorf("expected file with unknown height to proceed for downscale, got %s", job.Status)
+		}
+	})
 }

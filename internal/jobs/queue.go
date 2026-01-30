@@ -139,10 +139,10 @@ func (q *Queue) Add(inputPath string, presetID string, probe *ffmpeg.ProbeResult
 		isHardware = preset.Encoder != ffmpeg.HWAccelNone
 	}
 
-	// Check if file should be skipped
+	// Check if file should be skipped - get metadata from preset or base definitions
 	var skipReason string
-	if preset != nil {
-		skipReason = checkSkipReason(probe, preset, q.allowSameCodec)
+	if meta := getPresetMeta(preset, presetID); meta != nil {
+		skipReason = checkSkipReason(probe, meta, q.allowSameCodec)
 	}
 
 	status := StatusPending
@@ -209,11 +209,14 @@ func (q *Queue) AddMultiple(probes []*ffmpeg.ProbeResult, presetID string, smart
 	addedCount := 0
 	failedCount := 0
 
+	// Get metadata once for skip checks
+	meta := getPresetMeta(preset, presetID)
+
 	for _, probe := range probes {
 		// Check if file should be skipped
 		var skipReason string
-		if preset != nil {
-			skipReason = checkSkipReason(probe, preset, q.allowSameCodec)
+		if meta != nil {
+			skipReason = checkSkipReason(probe, meta, q.allowSameCodec)
 		}
 
 		status := StatusPending
@@ -718,21 +721,23 @@ func generateID() string {
 	return fmt.Sprintf("%d-%d", time.Now().UnixNano(), idCounter)
 }
 
-// checkSkipReason returns an error message if the file should be skipped, empty string otherwise.
-func checkSkipReason(probe *ffmpeg.ProbeResult, preset *ffmpeg.Preset, allowSameCodec bool) string {
+// checkSkipReason returns a skip reason if the file should be skipped, empty string otherwise.
+// Uses BasePresetMeta to decouple skip logic from full preset availability (e.g., VMAF).
+func checkSkipReason(probe *ffmpeg.ProbeResult, meta *ffmpeg.BasePresetMeta, allowSameCodec bool) string {
 	// For downscale presets, only check resolution (codec doesn't matter)
-	if preset.MaxHeight > 0 {
-		if probe.Height <= preset.MaxHeight {
-			return fmt.Sprintf("File is already %dp or smaller", preset.MaxHeight)
+	if meta.MaxHeight > 0 {
+		// Only skip if we have valid height info and it's already small enough
+		if probe.Height > 0 && probe.Height <= meta.MaxHeight {
+			return fmt.Sprintf("File is already %dp or smaller", meta.MaxHeight)
 		}
-		return "" // Needs downscaling, proceed regardless of codec
+		return "" // Needs downscaling (or unknown height), proceed regardless of codec
 	}
 
 	// For compression presets (including SmartShrink), check codec
 	var isAlreadyTarget bool
 	var codecName string
 
-	switch preset.Codec {
+	switch meta.Codec {
 	case ffmpeg.CodecHEVC:
 		isAlreadyTarget = probe.IsHEVC
 		codecName = "HEVC"
@@ -746,4 +751,13 @@ func checkSkipReason(probe *ffmpeg.ProbeResult, preset *ffmpeg.Preset, allowSame
 	}
 
 	return "" // Proceed with transcode
+}
+
+// getPresetMeta returns metadata for skip checks, preferring the full preset if available,
+// otherwise falling back to base preset definitions (works even without VMAF).
+func getPresetMeta(preset *ffmpeg.Preset, presetID string) *ffmpeg.BasePresetMeta {
+	if preset != nil {
+		return preset.Meta()
+	}
+	return ffmpeg.GetBasePresetMeta(presetID)
 }

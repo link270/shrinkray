@@ -201,6 +201,39 @@ var BasePresets = []struct {
 	{"smartshrink-av1", "SmartShrink (AV1)", "Auto-optimize with VMAF analysis", CodecAV1, 0, true},
 }
 
+// BasePresetMeta provides minimal preset metadata for skip checks.
+// This allows skip logic to run even when full presets aren't available (e.g., no VMAF).
+type BasePresetMeta struct {
+	Codec     Codec
+	MaxHeight int
+}
+
+// Meta returns the base metadata for this preset.
+// Returns nil if the receiver is nil.
+func (p *Preset) Meta() *BasePresetMeta {
+	if p == nil {
+		return nil
+	}
+	return &BasePresetMeta{
+		Codec:     p.Codec,
+		MaxHeight: p.MaxHeight,
+	}
+}
+
+// GetBasePresetMeta returns core metadata for a preset ID without VMAF gating.
+// Use this when GetPreset returns nil but you still need skip check info.
+func GetBasePresetMeta(id string) *BasePresetMeta {
+	for _, base := range BasePresets {
+		if base.ID == id {
+			return &BasePresetMeta{
+				Codec:     base.Codec,
+				MaxHeight: base.MaxHeight,
+			}
+		}
+	}
+	return nil
+}
+
 // GetEncoderDefaults returns the default quality values for a given encoder.
 // For bitrate-based encoders (VideoToolbox), returns 0 to indicate "use software defaults".
 func GetEncoderDefaults(encoder HWAccel) (hevcDefault, av1Default int) {

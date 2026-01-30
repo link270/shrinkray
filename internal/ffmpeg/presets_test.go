@@ -642,3 +642,81 @@ func TestBuildTonemapFilter(t *testing.T) {
 		})
 	}
 }
+
+func TestGetBasePresetMeta(t *testing.T) {
+	tests := []struct {
+		id            string
+		expectNil     bool
+		expectedCodec Codec
+		expectedMax   int
+	}{
+		{"compress-hevc", false, CodecHEVC, 0},
+		{"compress-av1", false, CodecAV1, 0},
+		{"smartshrink-hevc", false, CodecHEVC, 0},
+		{"smartshrink-av1", false, CodecAV1, 0},
+		{"1080p", false, CodecHEVC, 1080},
+		{"720p", false, CodecHEVC, 720},
+		{"nonexistent-preset", true, "", 0},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.id, func(t *testing.T) {
+			meta := GetBasePresetMeta(tt.id)
+
+			if tt.expectNil {
+				if meta != nil {
+					t.Errorf("expected nil for unknown preset %q, got %+v", tt.id, meta)
+				}
+				return
+			}
+
+			if meta == nil {
+				t.Fatalf("expected non-nil meta for %q", tt.id)
+			}
+
+			if meta.Codec != tt.expectedCodec {
+				t.Errorf("Codec: got %v, want %v", meta.Codec, tt.expectedCodec)
+			}
+
+			if meta.MaxHeight != tt.expectedMax {
+				t.Errorf("MaxHeight: got %d, want %d", meta.MaxHeight, tt.expectedMax)
+			}
+		})
+	}
+}
+
+func TestPreset_Meta(t *testing.T) {
+	preset := &Preset{
+		ID:            "test",
+		Name:          "Test",
+		Description:   "Test preset",
+		Encoder:       HWAccelNVENC,
+		Codec:         CodecAV1,
+		MaxHeight:     1080,
+		IsSmartShrink: true,
+	}
+
+	meta := preset.Meta()
+
+	if meta == nil {
+		t.Fatal("expected non-nil meta")
+	}
+
+	if meta.Codec != CodecAV1 {
+		t.Errorf("Codec: got %v, want %v", meta.Codec, CodecAV1)
+	}
+
+	if meta.MaxHeight != 1080 {
+		t.Errorf("MaxHeight: got %d, want 1080", meta.MaxHeight)
+	}
+}
+
+func TestPreset_Meta_NilSafe(t *testing.T) {
+	var preset *Preset = nil
+
+	meta := preset.Meta()
+
+	if meta != nil {
+		t.Errorf("expected nil meta for nil preset, got %+v", meta)
+	}
+}
