@@ -18,7 +18,7 @@ func TestBuildPresetArgsDynamicBitrate(t *testing.T) {
 		Codec:   CodecHEVC,
 	}
 
-	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, 0, 0, 0, 0, 0, false, "mkv", nil)
+	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, 0, 0, 0, 0, 0, false, "mkv", nil, nil)
 
 	// Should have hwaccel input args
 	if len(inputArgs) == 0 {
@@ -59,7 +59,7 @@ func TestBuildPresetArgsDynamicBitrateAV1(t *testing.T) {
 		Codec:   CodecAV1,
 	}
 
-	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, 0, 0, 0, 0, 0, false, "mkv", nil)
+	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, 0, 0, 0, 0, 0, false, "mkv", nil, nil)
 
 	// Should have hwaccel input args
 	if len(inputArgs) == 0 {
@@ -91,7 +91,7 @@ func TestBuildPresetArgsQualityModOverride(t *testing.T) {
 	}
 
 	// With qualityMod=0.5, target should be 10000 * 0.5 = 5000k
-	_, outputArgs := BuildPresetArgs(preset, sourceBitrate, 0, 0, 0, 0, 0.5, false, "mkv", nil)
+	_, outputArgs := BuildPresetArgs(preset, sourceBitrate, 0, 0, 0, 0, 0.5, false, "mkv", nil, nil)
 
 	for i, arg := range outputArgs {
 		if arg == "-b:v" && i+1 < len(outputArgs) {
@@ -118,7 +118,7 @@ func TestBuildPresetArgsQualityModIgnoredForCRFEncoders(t *testing.T) {
 	}
 
 	// qualityMod should be ignored for NVENC (CRF-based)
-	_, outputArgs := BuildPresetArgs(preset, sourceBitrate, 0, 0, 0, 0, 0.5, false, "mkv", nil)
+	_, outputArgs := BuildPresetArgs(preset, sourceBitrate, 0, 0, 0, 0, 0.5, false, "mkv", nil, nil)
 
 	// Should use -cq (constant quality) not -b:v
 	for i, arg := range outputArgs {
@@ -143,7 +143,7 @@ func TestBuildPresetArgsBitrateConstraints(t *testing.T) {
 		Codec:   CodecHEVC,
 	}
 
-	_, outputArgs := BuildPresetArgs(presetLow, lowBitrate, 0, 0, 0, 0, 0, false, "mkv", nil)
+	_, outputArgs := BuildPresetArgs(presetLow, lowBitrate, 0, 0, 0, 0, 0, false, "mkv", nil, nil)
 	for i, arg := range outputArgs {
 		if arg == "-b:v" && i+1 < len(outputArgs) {
 			bitrate := outputArgs[i+1]
@@ -164,7 +164,7 @@ func TestBuildPresetArgsBitrateConstraints(t *testing.T) {
 		Codec:   CodecHEVC,
 	}
 
-	_, outputArgs = BuildPresetArgs(presetHigh, highBitrate, 0, 0, 0, 0, 0, false, "mkv", nil)
+	_, outputArgs = BuildPresetArgs(presetHigh, highBitrate, 0, 0, 0, 0, 0, false, "mkv", nil, nil)
 	for i, arg := range outputArgs {
 		if arg == "-b:v" && i+1 < len(outputArgs) {
 			bitrate := outputArgs[i+1]
@@ -187,7 +187,7 @@ func TestBuildPresetArgsNonBitrateEncoder(t *testing.T) {
 		Codec:   CodecHEVC,
 	}
 
-	inputArgs, outputArgs := BuildPresetArgs(presetSoftware, sourceBitrate, 0, 0, 0, 0, 0, false, "mkv", nil)
+	inputArgs, outputArgs := BuildPresetArgs(presetSoftware, sourceBitrate, 0, 0, 0, 0, 0, false, "mkv", nil, nil)
 
 	// Software encoder should have no hwaccel input args
 	if len(inputArgs) != 0 {
@@ -228,7 +228,7 @@ func TestBuildPresetArgsZeroBitrate(t *testing.T) {
 		Codec:   CodecHEVC,
 	}
 
-	inputArgs, outputArgs := BuildPresetArgs(presetVT, 0, 0, 0, 0, 0, 0, false, "mkv", nil)
+	inputArgs, outputArgs := BuildPresetArgs(presetVT, 0, 0, 0, 0, 0, 0, false, "mkv", nil, nil)
 
 	// Should still have hwaccel input args
 	if len(inputArgs) == 0 {
@@ -294,7 +294,7 @@ func TestQSVPresetFilterChain(t *testing.T) {
 				Codec:   tt.codec,
 			}
 
-			_, outputArgs := BuildPresetArgs(preset, 1000000, 1920, 1080, 0, 0, 0, false, "mkv", nil)
+			_, outputArgs := BuildPresetArgs(preset, 1000000, 1920, 1080, 0, 0, 0, false, "mkv", nil, nil)
 
 			// Find -vf argument
 			for i, arg := range outputArgs {
@@ -324,10 +324,10 @@ func TestBuildPresetArgsSoftwareDecode(t *testing.T) {
 	}
 
 	// Hardware decode (softwareDecode=false)
-	inputArgsHW, _ := BuildPresetArgs(preset, 1000000, 1920, 1080, 0, 0, 0, false, "mkv", nil)
+	inputArgsHW, _ := BuildPresetArgs(preset, 1000000, 1920, 1080, 0, 0, 0, false, "mkv", nil, nil)
 
 	// Software decode (softwareDecode=true)
-	inputArgsSW, outputArgsSW := BuildPresetArgs(preset, 1000000, 1920, 1080, 0, 0, 0, true, "mkv", nil)
+	inputArgsSW, outputArgsSW := BuildPresetArgs(preset, 1000000, 1920, 1080, 0, 0, 0, true, "mkv", nil, nil)
 
 	// Hardware decode should have -hwaccel
 	hasHwaccelHW := false
@@ -438,7 +438,7 @@ func TestBuildPresetArgsHDRPermutations(t *testing.T) {
 						}
 					}
 
-					_, outputArgs := BuildPresetArgs(preset, 10000000, 1920, 1080, 0, 0, 0, false, "mkv", tonemap)
+					_, outputArgs := BuildPresetArgs(preset, 10000000, 1920, 1080, 0, 0, 0, false, "mkv", tonemap, nil)
 
 					outputStr := strings.Join(outputArgs, " ")
 
@@ -548,7 +548,7 @@ func TestBuildPresetArgsHDRFilters(t *testing.T) {
 				Algorithm:     "hable",
 			}
 
-			inputArgs, outputArgs := BuildPresetArgs(preset, 10000000, 1920, 1080, 0, 0, 0, false, "mkv", tonemap)
+			inputArgs, outputArgs := BuildPresetArgs(preset, 10000000, 1920, 1080, 0, 0, 0, false, "mkv", tonemap, nil)
 			allArgs := strings.Join(append(inputArgs, outputArgs...), " ")
 
 			// Note: Filter availability depends on system, so we just log
@@ -718,5 +718,70 @@ func TestPreset_Meta_NilSafe(t *testing.T) {
 
 	if meta != nil {
 		t.Errorf("expected nil meta for nil preset, got %+v", meta)
+	}
+}
+
+func TestBuildPresetArgsSubtitleMapping(t *testing.T) {
+	preset := &Preset{
+		ID:      "test-hevc",
+		Encoder: HWAccelNone,
+		Codec:   CodecHEVC,
+	}
+
+	tests := []struct {
+		name            string
+		subtitleIndices []int
+		outputFormat    string
+		wantContains    []string
+		wantNotContains []string
+	}{
+		{
+			name:            "nil indices maps all subtitles (MKV)",
+			subtitleIndices: nil,
+			outputFormat:    "mkv",
+			wantContains:    []string{"0:s?", "-c:s", "copy"},
+			wantNotContains: []string{"-sn"},
+		},
+		{
+			name:            "empty indices maps no subtitles",
+			subtitleIndices: []int{},
+			outputFormat:    "mkv",
+			// NOTE: -map still appears for video/audio (0:v:0, 0:a?), so we only
+			// check that subtitle-specific mapping is absent
+			wantContains:    []string{"-c:a", "copy"}, // Audio still copied
+			wantNotContains: []string{"0:s?", "-c:s"}, // No subtitle mapping
+		},
+		{
+			name:            "specific indices maps those streams by absolute index",
+			subtitleIndices: []int{2, 4},
+			outputFormat:    "mkv",
+			wantContains:    []string{"0:2", "0:4", "-c:s", "copy"},
+			wantNotContains: []string{"0:s?"},
+		},
+		{
+			name:            "MP4 always strips subtitles regardless of indices",
+			subtitleIndices: []int{2, 4},
+			outputFormat:    "mp4",
+			wantContains:    []string{"-sn"},
+			wantNotContains: []string{"0:2", "0:4", "-c:s"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, outputArgs := BuildPresetArgs(preset, 0, 1920, 1080, 0, 0, 0, false, tt.outputFormat, nil, tt.subtitleIndices)
+			argsStr := strings.Join(outputArgs, " ")
+
+			for _, want := range tt.wantContains {
+				if !strings.Contains(argsStr, want) {
+					t.Errorf("expected args to contain %q, got: %s", want, argsStr)
+				}
+			}
+			for _, notWant := range tt.wantNotContains {
+				if strings.Contains(argsStr, notWant) {
+					t.Errorf("expected args NOT to contain %q, got: %s", notWant, argsStr)
+				}
+			}
+		})
 	}
 }

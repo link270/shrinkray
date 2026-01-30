@@ -464,6 +464,7 @@ func (w *Worker) tryEncoderFallbacks(
 	totalFrames int64,
 	tonemapParams *ffmpeg.TonemapParams,
 	priorError error,
+	subtitleIndices []int,
 ) (*ffmpeg.TranscodeResult, error) {
 	currentEncoder := preset.Encoder
 	lastError := priorError
@@ -496,7 +497,7 @@ func (w *Worker) tryEncoderFallbacks(
 		// Try with HW decode first (unless this encoder requires SW decode)
 		if !fallbackNeedsSWDecode {
 			result, err := w.attemptTranscode(jobCtx, job, fallbackPreset, tempPath,
-				duration, qualityHEVC, qualityAV1, qualityMod, totalFrames, tonemapParams, false)
+				duration, qualityHEVC, qualityAV1, qualityMod, totalFrames, tonemapParams, false, subtitleIndices)
 
 			if err == nil {
 				logger.Info("Fallback encoder succeeded", "job_id", job.ID, "encoder", fallback.Accel)
@@ -513,7 +514,7 @@ func (w *Worker) tryEncoderFallbacks(
 		// Try SW decode with fallback encoder (unless it's software encoder - no point)
 		if shouldRetryWithSoftwareDecode(fallback.Accel) {
 			result, err := w.attemptTranscode(jobCtx, job, fallbackPreset, tempPath,
-				duration, qualityHEVC, qualityAV1, qualityMod, totalFrames, tonemapParams, true)
+				duration, qualityHEVC, qualityAV1, qualityMod, totalFrames, tonemapParams, true, subtitleIndices)
 
 			if err == nil {
 				logger.Info("Fallback encoder succeeded with SW decode", "job_id", job.ID, "encoder", fallback.Accel)
@@ -545,6 +546,7 @@ func (w *Worker) attemptTranscode(
 	totalFrames int64,
 	tonemapParams *ffmpeg.TonemapParams,
 	softwareDecode bool,
+	subtitleIndices []int,
 ) (*ffmpeg.TranscodeResult, error) {
 	// Create fresh progress channel (Transcode closes it when done)
 	progressCh := make(chan ffmpeg.Progress, 10)
@@ -558,7 +560,7 @@ func (w *Worker) attemptTranscode(
 	return w.transcoder.Transcode(jobCtx, job.InputPath, tempPath,
 		preset, duration, job.Bitrate, job.Width, job.Height,
 		qualityHEVC, qualityAV1, qualityMod, totalFrames, progressCh,
-		softwareDecode, w.cfg.OutputFormat, tonemapParams)
+		softwareDecode, w.cfg.OutputFormat, tonemapParams, subtitleIndices)
 }
 
 // processJob handles a single transcoding job
@@ -711,7 +713,34 @@ func (w *Worker) processJob(job *Job) {
 		)
 	}
 
-	result, err := w.transcoder.Transcode(jobCtx, job.InputPath, tempPath, preset, duration, job.Bitrate, job.Width, job.Height, qualityHEVC, qualityAV1, qualityMod, totalFrames, progressCh, useSoftwareDecode, w.cfg.OutputFormat, tonemapParams)
+	// For MKV output, filter incompatible subtitle codecs to avoid muxing failures.
+	// Only applies to MKV - other formats (mp4, webm, etc.) have different rules.
+	var subtitleIndices []int // nil = map all (default)
+	if w.cfg.OutputFormat == "mkv" {
+		// Use a short timeout for subtitle probing to avoid stalling the job
+		probeCtx, probeCancel := context.WithTimeout(jobCtx, 10*time.Second)
+		subtitleStreams, err := w.prober.ProbeSubtitles(probeCtx, job.InputPath)
+		probeCancel()
+
+		if err != nil {
+			logger.Warn("Failed to probe subtitles, using default mapping",
+				"job_id", job.ID, "error", err)
+			// subtitleIndices stays nil = map all (fallback to prior behavior).
+			// This preserves subtitles if probe fails, but may still fail on
+			// incompatible codecs. Better than silently dropping all subtitles.
+		} else if len(subtitleStreams) > 0 {
+			compatible, dropped := ffmpeg.FilterMKVCompatible(subtitleStreams)
+			if len(dropped) > 0 {
+				logger.Warn("Dropping incompatible subtitle streams",
+					"job_id", job.ID,
+					"dropped", dropped,
+					"reason", "not supported in MKV container")
+			}
+			subtitleIndices = compatible
+		}
+	}
+
+	result, err := w.transcoder.Transcode(jobCtx, job.InputPath, tempPath, preset, duration, job.Bitrate, job.Width, job.Height, qualityHEVC, qualityAV1, qualityMod, totalFrames, progressCh, useSoftwareDecode, w.cfg.OutputFormat, tonemapParams, subtitleIndices)
 
 	// Recovery strategies for hardware encoder failures
 	if err != nil && jobCtx.Err() != context.Canceled && preset.Encoder != ffmpeg.HWAccelNone {
@@ -721,7 +750,7 @@ func (w *Worker) processJob(job *Job) {
 				"job_id", job.ID, "error", err.Error())
 
 			result, err = w.attemptTranscode(jobCtx, job, preset, tempPath,
-				duration, qualityHEVC, qualityAV1, qualityMod, totalFrames, tonemapParams, true)
+				duration, qualityHEVC, qualityAV1, qualityMod, totalFrames, tonemapParams, true, subtitleIndices)
 
 			if err == nil {
 				logger.Info("Software decode fallback succeeded", "job_id", job.ID)
@@ -734,7 +763,7 @@ func (w *Worker) processJob(job *Job) {
 				"job_id", job.ID, "encoder", preset.Encoder, "error", err.Error())
 
 			result, err = w.tryEncoderFallbacks(jobCtx, job, preset, tempPath,
-				duration, qualityHEVC, qualityAV1, qualityMod, totalFrames, tonemapParams, err)
+				duration, qualityHEVC, qualityAV1, qualityMod, totalFrames, tonemapParams, err, subtitleIndices)
 		}
 	}
 

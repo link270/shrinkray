@@ -74,6 +74,7 @@ func NewTranscoder(ffmpegPath string) *Transcoder {
 // softwareDecode: if true, use software decode with hardware encode (fallback for hw decode failures)
 // outputFormat: "mkv" or "mp4" - affects audio/subtitle handling
 // tonemap: optional HDR to SDR tonemapping parameters (nil = no tonemapping)
+// subtitleIndices: nil=map all, empty=none, populated=specific indices (for MKV compatibility filtering)
 func (t *Transcoder) Transcode(
 	ctx context.Context,
 	inputPath string,
@@ -89,6 +90,7 @@ func (t *Transcoder) Transcode(
 	softwareDecode bool,
 	outputFormat string,
 	tonemap *TonemapParams,
+	subtitleIndices []int,
 ) (*TranscodeResult, error) {
 	startTime := time.Now()
 
@@ -109,7 +111,7 @@ func (t *Transcoder) Transcode(
 
 	// Build preset args with source bitrate for dynamic calculation
 	// inputArgs go before -i (hwaccel), outputArgs go after
-	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, sourceWidth, sourceHeight, qualityHEVC, qualityAV1, qualityMod, softwareDecode, outputFormat, tonemap)
+	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, sourceWidth, sourceHeight, qualityHEVC, qualityAV1, qualityMod, softwareDecode, outputFormat, tonemap, subtitleIndices)
 
 	// Build ffmpeg command
 	// Structure: ffmpeg [inputArgs] -i input [outputArgs] output

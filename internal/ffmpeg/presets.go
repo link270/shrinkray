@@ -389,8 +389,13 @@ type TonemapParams struct {
 // softwareDecode: if true, skip hardware decode args and use software decode filter
 // outputFormat: "mkv" preserves audio/subs, "mp4" transcodes to AAC and strips subtitles
 // tonemap: optional tonemapping parameters (nil = no tonemapping)
+// subtitleIndices controls subtitle mapping for MKV output:
+//   - nil: map all subtitles (-map 0:s?)
+//   - empty slice: map no subtitles (all incompatible)
+//   - populated slice: map specific stream indices (-map 0:2 -map 0:4)
+//
 // Returns (inputArgs, outputArgs) - inputArgs go before -i, outputArgs go after
-func BuildPresetArgs(preset *Preset, sourceBitrate int64, sourceWidth, sourceHeight int, qualityHEVC, qualityAV1 int, qualityMod float64, softwareDecode bool, outputFormat string, tonemap *TonemapParams) (inputArgs []string, outputArgs []string) {
+func BuildPresetArgs(preset *Preset, sourceBitrate int64, sourceWidth, sourceHeight int, qualityHEVC, qualityAV1 int, qualityMod float64, softwareDecode bool, outputFormat string, tonemap *TonemapParams, subtitleIndices []int) (inputArgs []string, outputArgs []string) {
 	key := EncoderKey{preset.Encoder, preset.Codec}
 	config, ok := encoderConfigs[key]
 	if !ok {
@@ -592,12 +597,28 @@ func BuildPresetArgs(preset *Preset, sourceBitrate int64, sourceWidth, sourceHei
 			"-sn",      // Strip subtitles
 		)
 	} else {
-		// MKV: Copy all streams as-is
-		outputArgs = append(outputArgs,
-			"-map", "0:s?", // All subtitle streams (optional)
-			"-c:a", "copy",
-			"-c:s", "copy",
-		)
+		// MKV: Copy audio, handle subtitles based on subtitleIndices
+		outputArgs = append(outputArgs, "-c:a", "copy")
+
+		switch {
+		case subtitleIndices == nil:
+			// nil = map all subtitles (default/fallback behavior)
+			outputArgs = append(outputArgs,
+				"-map", "0:s?", // All subtitle streams (optional)
+				"-c:s", "copy",
+			)
+		case len(subtitleIndices) == 0:
+			// empty = no subtitles to map (all were incompatible)
+			// Don't add any subtitle mapping
+		default:
+			// specific indices = map only compatible streams by absolute stream index
+			// (from ffprobe's stream.index field, not subtitle-relative ordinal)
+			// Use ? suffix for safety in case indices become stale
+			for _, idx := range subtitleIndices {
+				outputArgs = append(outputArgs, "-map", fmt.Sprintf("0:%d?", idx))
+			}
+			outputArgs = append(outputArgs, "-c:s", "copy")
+		}
 	}
 
 	return inputArgs, outputArgs
@@ -615,8 +636,9 @@ func BuildSampleEncodeArgs(preset *Preset, sourceWidth, sourceHeight int,
 	// We pass modifierOverride as qualityMod. For bitrate-based encoders (VideoToolbox),
 	// BuildPresetArgs uses a 10Mbps reference when sourceBitrate=0 and applies the modifier.
 	// When modifierOverride > 0, we also replace -b:v below for explicit control.
+	// Pass nil for subtitleIndices (samples don't use subtitles anyway - we strip them below)
 	inputArgs, outputArgs = BuildPresetArgs(preset, 0, sourceWidth, sourceHeight,
-		qualityOverride, qualityOverride, modifierOverride, softwareDecode, "mkv", tonemap)
+		qualityOverride, qualityOverride, modifierOverride, softwareDecode, "mkv", tonemap, nil)
 
 	// Remove audio/subtitle mapping and replace with video-only
 	filteredArgs := make([]string, 0, len(outputArgs))

@@ -10,6 +10,13 @@ import (
 	"time"
 )
 
+// SubtitleStream contains metadata about a subtitle stream.
+// Index is the absolute stream index (used with -map 0:N), not subtitle-relative.
+type SubtitleStream struct {
+	Index     int    // Absolute stream index in the file (for -map 0:N)
+	CodecName string // e.g., "mov_text", "subrip", "hdmv_pgs_subtitle"
+}
+
 // ProbeResult contains metadata about a video file
 type ProbeResult struct {
 	Path        string        `json:"path"`
@@ -49,6 +56,7 @@ type ffprobeFormat struct {
 }
 
 type ffprobeStream struct {
+	Index            int    `json:"index"`
 	CodecType        string `json:"codec_type"`
 	CodecName        string `json:"codec_name"`
 	Width            int    `json:"width"`
@@ -152,6 +160,43 @@ func (p *Prober) Probe(ctx context.Context, path string) (*ProbeResult, error) {
 	}
 
 	return result, nil
+}
+
+// ProbeSubtitles returns subtitle stream info for a file.
+// Returns nil slice if no subtitle streams exist.
+func (p *Prober) ProbeSubtitles(ctx context.Context, path string) ([]SubtitleStream, error) {
+	cmd := exec.CommandContext(ctx, p.ffprobePath,
+		"-v", "quiet",
+		"-print_format", "json",
+		"-show_streams",
+		"-select_streams", "s", // Only subtitle streams
+		path,
+	)
+
+	output, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("ffprobe failed: %s", string(exitErr.Stderr))
+		}
+		return nil, fmt.Errorf("ffprobe failed: %w", err)
+	}
+
+	var probeOutput ffprobeOutput
+	if err := json.Unmarshal(output, &probeOutput); err != nil {
+		return nil, fmt.Errorf("failed to parse ffprobe output: %w", err)
+	}
+
+	// Since we used -select_streams s, all returned streams are subtitles.
+	// No need to filter by CodecType (which could be empty in some ffprobe versions).
+	var subtitles []SubtitleStream
+	for i := range probeOutput.Streams {
+		subtitles = append(subtitles, SubtitleStream{
+			Index:     probeOutput.Streams[i].Index,
+			CodecName: probeOutput.Streams[i].CodecName,
+		})
+	}
+
+	return subtitles, nil
 }
 
 // detectHDR determines if video is HDR based on color metadata.

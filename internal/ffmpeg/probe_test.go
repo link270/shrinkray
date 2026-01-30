@@ -357,6 +357,41 @@ func TestProbe_HDRDetection(t *testing.T) {
 	}
 }
 
+func TestProbeSubtitles(t *testing.T) {
+	testFile := filepath.Join(getTestdataPath(), "test_x264.mkv")
+
+	// Skip if test file doesn't exist
+	if _, err := os.Stat(testFile); os.IsNotExist(err) {
+		t.Skipf("test file not found: %s", testFile)
+	}
+
+	prober := NewProber("ffprobe")
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Our test file may or may not have subtitles - we're testing the method works
+	subs, err := prober.ProbeSubtitles(ctx, testFile)
+	if err != nil {
+		t.Fatalf("ProbeSubtitles failed: %v", err)
+	}
+
+	// Should return a slice (possibly empty)
+	t.Logf("Found %d subtitle streams", len(subs))
+	for _, s := range subs {
+		t.Logf("  Stream %d: codec=%s", s.Index, s.CodecName)
+	}
+}
+
+func TestProbeSubtitlesNonExistent(t *testing.T) {
+	prober := NewProber("ffprobe")
+	ctx := context.Background()
+
+	_, err := prober.ProbeSubtitles(ctx, "/nonexistent/file.mkv")
+	if err == nil {
+		t.Error("expected error for non-existent file")
+	}
+}
+
 // TestDetectHDR verifies HDR detection based on color metadata
 func TestDetectHDR(t *testing.T) {
 	tests := []struct {
