@@ -77,6 +77,9 @@ func TestBuildHDRScoringFilter(t *testing.T) {
 	if !strings.Contains(filter, "p=bt709") {
 		t.Error("missing bt709 primaries output")
 	}
+	if !strings.Contains(filter, "t=bt709") {
+		t.Error("missing bt709 transfer output")
+	}
 	if !strings.Contains(filter, "m=bt709") {
 		t.Error("missing bt709 matrix output")
 	}
@@ -84,6 +87,23 @@ func TestBuildHDRScoringFilter(t *testing.T) {
 	// Check tonemap with algorithm
 	if !strings.Contains(filter, "tonemap=hable") {
 		t.Error("missing tonemap filter with algorithm")
+	}
+
+	// CRITICAL: Verify correct pipeline order - tonemap must operate on linear light
+	// Order: linearize -> float -> primaries -> tonemap -> transfer/matrix -> yuv420p
+	primariesIdx := strings.Index(filter, "zscale=p=bt709")
+	tonemapIdx := strings.Index(filter, "tonemap=")
+	transferIdx := strings.Index(filter, "zscale=t=bt709")
+
+	if primariesIdx == -1 || tonemapIdx == -1 || transferIdx == -1 {
+		t.Fatal("missing required filter components for order check")
+	}
+
+	if primariesIdx > tonemapIdx {
+		t.Error("primaries conversion (p=bt709) must come BEFORE tonemap")
+	}
+	if tonemapIdx > transferIdx {
+		t.Error("tonemap must come BEFORE transfer function (t=bt709)")
 	}
 
 	// Check libvmaf

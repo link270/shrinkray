@@ -25,6 +25,14 @@ func buildSDRScoringFilter(model string, threads int) string {
 // buildHDRScoringFilter creates a filtergraph for HDR VMAF comparison.
 // The reference leg is tonemapped from HDR to SDR to match the distorted leg.
 // Explicit color metadata ensures correct HDR interpretation.
+//
+// Pipeline order (tonemap requires linear light input):
+// 1. Linearize from PQ with explicit HDR metadata
+// 2. Convert to float format for precision
+// 3. Convert primaries to bt709 (color space, still linear)
+// 4. Apply tonemap algorithm (operates on linear light)
+// 5. Apply bt709 transfer curve and matrix (gamma correction)
+// 6. Convert to yuv420p for VMAF
 func buildHDRScoringFilter(model string, threads int, algorithm string) string {
 	// Distorted is already SDR (tonemapped during encoding)
 	// Reference is HDR, needs tonemapping before comparison
@@ -32,8 +40,9 @@ func buildHDRScoringFilter(model string, threads int, algorithm string) string {
 		"[0:v]format=yuv420p[dist];"+
 			"[1:v]zscale=pin=bt2020:tin=smpte2084:min=bt2020nc:t=linear:npl=1000,"+
 			"format=gbrpf32le,"+
-			"zscale=p=bt709:t=bt709:m=bt709,"+
+			"zscale=p=bt709,"+
 			"tonemap=%s:desat=0:peak=100,"+
+			"zscale=t=bt709:m=bt709,"+
 			"format=yuv420p[ref];"+
 			"[dist][ref]libvmaf=model=version=%s:n_threads=%d:log_fmt=json:log_path=/dev/stdout",
 		algorithm, model, threads)
