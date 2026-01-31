@@ -2490,22 +2490,30 @@
             const btn = document.querySelector('.breadcrumb-refresh');
             if (btn) btn.classList.add('refreshing');
 
-            // Ensure animation runs for at least 500ms so it's visible
-            const minDuration = new Promise(resolve => setTimeout(resolve, 500));
+            // Yield a frame so browser can paint the animation before work starts
+            await new Promise(requestAnimationFrame);
+
+            const startTime = Date.now();
 
             try {
-                // Clear the backend probe cache and re-browse in parallel with min duration
-                await Promise.all([
-                    (async () => {
-                        await fetch('/api/cache/clear', { method: 'POST' });
-                        await browse(currentPath);
-                    })(),
-                    minDuration
-                ]);
+                await fetch('/api/cache/clear', { method: 'POST' });
+                await browse(currentPath);
+
+                // browse() replaces the button, so re-add the class to the new button
+                const newBtn = document.querySelector('.breadcrumb-refresh');
+                if (newBtn) newBtn.classList.add('refreshing');
+
+                // Ensure animation runs for at least 600ms total so it's visible
+                const elapsed = Date.now() - startTime;
+                const remaining = Math.max(0, 600 - elapsed);
+                if (remaining > 0) {
+                    await new Promise(resolve => setTimeout(resolve, remaining));
+                }
             } catch (err) {
                 console.error('Refresh error:', err);
             } finally {
-                if (btn) btn.classList.remove('refreshing');
+                const finalBtn = document.querySelector('.breadcrumb-refresh');
+                if (finalBtn) finalBtn.classList.remove('refreshing');
             }
         }
 
