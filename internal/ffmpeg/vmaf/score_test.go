@@ -1,6 +1,7 @@
 package vmaf
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -31,6 +32,76 @@ func TestBuildSDRScoringFilter(t *testing.T) {
 	}
 	if !strings.Contains(filter, "log_path=/dev/stdout") {
 		t.Error("missing stdout log path")
+	}
+}
+
+func TestBuildHDRScoringFilter(t *testing.T) {
+	filter := buildHDRScoringFilter("vmaf_v0.6.1", 4, "hable")
+
+	// Distorted leg should be simple format conversion (already SDR)
+	if !strings.Contains(filter, "[0:v]format=yuv420p[dist]") {
+		t.Error("missing distorted leg format conversion")
+	}
+
+	// Reference leg should have full tonemap pipeline
+	if !strings.Contains(filter, "[1:v]") {
+		t.Error("missing reference leg start")
+	}
+
+	// Check explicit HDR input metadata
+	if !strings.Contains(filter, "pin=bt2020") {
+		t.Error("missing bt2020 primaries input")
+	}
+	if !strings.Contains(filter, "tin=smpte2084") {
+		t.Error("missing PQ transfer input")
+	}
+	if !strings.Contains(filter, "min=bt2020nc") {
+		t.Error("missing bt2020nc matrix input")
+	}
+
+	// Check linearization
+	if !strings.Contains(filter, "t=linear") {
+		t.Error("missing linear transfer")
+	}
+	if !strings.Contains(filter, "npl=1000") {
+		t.Error("missing nominal peak luminance")
+	}
+
+	// Check float format for precision
+	if !strings.Contains(filter, "format=gbrpf32le") {
+		t.Error("missing float format conversion")
+	}
+
+	// Check SDR output metadata
+	if !strings.Contains(filter, "p=bt709") {
+		t.Error("missing bt709 primaries output")
+	}
+	if !strings.Contains(filter, "m=bt709") {
+		t.Error("missing bt709 matrix output")
+	}
+
+	// Check tonemap with algorithm
+	if !strings.Contains(filter, "tonemap=hable") {
+		t.Error("missing tonemap filter with algorithm")
+	}
+
+	// Check libvmaf
+	if !strings.Contains(filter, "[dist][ref]libvmaf=") {
+		t.Error("missing libvmaf filter")
+	}
+}
+
+func TestBuildHDRScoringFilterAlgorithms(t *testing.T) {
+	algorithms := []string{"hable", "bt2390", "reinhard", "mobius"}
+
+	for _, algo := range algorithms {
+		t.Run(algo, func(t *testing.T) {
+			filter := buildHDRScoringFilter("vmaf_v0.6.1", 4, algo)
+			expected := fmt.Sprintf("tonemap=%s:", algo)
+			if !strings.Contains(filter, expected) {
+				t.Errorf("expected tonemap algorithm %s, got filter: %s", algo, filter)
+			}
+		})
 	}
 }
 

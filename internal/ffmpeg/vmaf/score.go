@@ -22,6 +22,23 @@ func buildSDRScoringFilter(model string, threads int) string {
 		model, threads)
 }
 
+// buildHDRScoringFilter creates a filtergraph for HDR VMAF comparison.
+// The reference leg is tonemapped from HDR to SDR to match the distorted leg.
+// Explicit color metadata ensures correct HDR interpretation.
+func buildHDRScoringFilter(model string, threads int, algorithm string) string {
+	// Distorted is already SDR (tonemapped during encoding)
+	// Reference is HDR, needs tonemapping before comparison
+	return fmt.Sprintf(
+		"[0:v]format=yuv420p[dist];"+
+			"[1:v]zscale=pin=bt2020:tin=smpte2084:min=bt2020nc:t=linear:npl=1000,"+
+			"format=gbrpf32le,"+
+			"zscale=p=bt709:t=bt709:m=bt709,"+
+			"tonemap=%s:desat=0:peak=100,"+
+			"format=yuv420p[ref];"+
+			"[dist][ref]libvmaf=model=version=%s:n_threads=%d:log_fmt=json:log_path=/dev/stdout",
+		algorithm, model, threads)
+}
+
 // SetMaxConcurrentAnalyses configures the concurrent analysis limit and returns the clamped value.
 // Thread count per analysis is fixed at ~50% CPU (numCPU/2) regardless of this setting.
 // Multiple concurrent analyses can stack to use more total CPU.
