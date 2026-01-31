@@ -505,7 +505,12 @@
         }
 
         .breadcrumb-refresh.refreshing svg {
-            animation: spin 1s linear infinite;
+            animation: spin-once 0.5s ease-out;
+        }
+
+        @keyframes spin-once {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
         }
 
         @keyframes spin {
@@ -2495,24 +2500,36 @@
         // Refresh browser by clearing cache and re-browsing current path
         async function refreshBrowser() {
             const btn = document.getElementById('refresh-btn');
-            if (btn) btn.classList.add('refreshing');
+            if (!btn) return;
 
-            const startTime = Date.now();
+            const svg = btn.querySelector('svg');
+            let animationDone = false;
+            let operationsDone = false;
+
+            const cleanup = () => {
+                if (animationDone && operationsDone) {
+                    btn.classList.remove('refreshing');
+                }
+            };
+
+            // Listen for animation end
+            const onAnimationEnd = () => {
+                animationDone = true;
+                svg.removeEventListener('animationend', onAnimationEnd);
+                cleanup();
+            };
+            svg.addEventListener('animationend', onAnimationEnd);
+
+            btn.classList.add('refreshing');
 
             try {
                 await fetch('/api/cache/clear', { method: 'POST' });
                 await browse(currentPath);
-
-                // Ensure animation runs for at least 600ms so it's visible
-                const elapsed = Date.now() - startTime;
-                const remaining = Math.max(0, 600 - elapsed);
-                if (remaining > 0) {
-                    await new Promise(resolve => setTimeout(resolve, remaining));
-                }
             } catch (err) {
                 console.error('Refresh error:', err);
             } finally {
-                if (btn) btn.classList.remove('refreshing');
+                operationsDone = true;
+                cleanup();
             }
         }
 
