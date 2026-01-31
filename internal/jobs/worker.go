@@ -70,6 +70,13 @@ const (
 	vmafExcellent  = 94.0
 )
 
+// runningJob tracks a job being processed by a worker.
+// Used by Resize and Pause to collect and manage running jobs.
+type runningJob struct {
+	worker *Worker
+	jobID  string
+}
+
 // getSmartShrinkThreshold returns the VMAF threshold for a quality tier
 func getSmartShrinkThreshold(quality string) float64 {
 	switch quality {
@@ -90,13 +97,7 @@ func NewWorkerPool(queue *Queue, cfg *config.Config, invalidateCache CacheInvali
 	// VMAF scoring is CPU-intensive (libvmaf cannot be hardware accelerated).
 	// Each analysis uses ~50% of CPU cores, so multiple concurrent analyses
 	// can saturate the CPU. Default is 1 for media server friendliness.
-	analysisLimit := cfg.MaxConcurrentAnalyses
-	if analysisLimit < 1 {
-		analysisLimit = 1
-	}
-	if analysisLimit > 3 {
-		analysisLimit = 3
-	}
+	analysisLimit := ClampAnalysisCount(cfg.MaxConcurrentAnalyses)
 
 	pool := &WorkerPool{
 		workers:         make([]*Worker, 0, cfg.Workers),
@@ -176,12 +177,7 @@ func (p *WorkerPool) CancelJob(jobID string) bool {
 // If n < current, excess workers are stopped immediately
 // Jobs are cancelled in reverse order (most recently added jobs cancelled first)
 func (p *WorkerPool) Resize(n int) {
-	if n < 1 {
-		n = 1
-	}
-	if n > 6 {
-		n = 6 // reasonable upper limit
-	}
+	n = ClampWorkerCount(n)
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
@@ -201,12 +197,7 @@ func (p *WorkerPool) Resize(n int) {
 		workersToStop := current - n
 
 		// First, collect all running jobs and their workers
-		type runningJob struct {
-			worker *Worker
-			jobID  string
-		}
 		var runningJobs []runningJob
-
 		for _, w := range p.workers {
 			w.currentJobMu.Lock()
 			if w.currentJob != nil {
@@ -267,12 +258,7 @@ func (p *WorkerPool) Resize(n int) {
 // Unlike worker resize, running analyses are NOT cancelled - they complete
 // and the new limit takes effect for subsequent analyses.
 func (p *WorkerPool) SetAnalysisLimit(n int) {
-	if n < 1 {
-		n = 1
-	}
-	if n > 3 {
-		n = 3
-	}
+	n = ClampAnalysisCount(n)
 
 	p.analysisMu.Lock()
 	old := p.analysisLimit
@@ -314,10 +300,6 @@ func (p *WorkerPool) Pause() int {
 
 	// Collect all running jobs
 	p.mu.Lock()
-	type runningJob struct {
-		worker *Worker
-		jobID  string
-	}
 	var runningJobs []runningJob
 	for _, w := range p.workers {
 		w.currentJobMu.Lock()

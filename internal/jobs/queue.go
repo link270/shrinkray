@@ -316,7 +316,7 @@ func (q *Queue) StartJob(id string, tempPath string) error {
 
 	job, ok := q.jobs[id]
 	if !ok {
-		return fmt.Errorf("job not found: %s", id)
+		return jobNotFoundError(id)
 	}
 
 	if job.Status != StatusPending {
@@ -360,7 +360,7 @@ func (q *Queue) CompleteJob(id string, outputPath string, outputSize int64) erro
 
 	job, ok := q.jobs[id]
 	if !ok {
-		return fmt.Errorf("job not found: %s", id)
+		return jobNotFoundError(id)
 	}
 
 	job.Status = StatusComplete
@@ -393,7 +393,7 @@ func (q *Queue) FailJob(id string, errMsg string) error {
 
 	job, ok := q.jobs[id]
 	if !ok {
-		return fmt.Errorf("job not found: %s", id)
+		return jobNotFoundError(id)
 	}
 
 	job.Status = StatusFailed
@@ -415,12 +415,12 @@ func (q *Queue) SkipJob(id, reason string) error {
 
 	job, exists := q.jobs[id]
 	if !exists {
-		return fmt.Errorf("job %s not found", id)
+		return jobNotFoundError(id)
 	}
 
 	// Only running jobs can be skipped (during analysis phase)
 	if job.Status != StatusRunning {
-		return fmt.Errorf("job %s is not running (status: %s)", id, job.Status)
+		return jobNotRunningError(id, job.Status)
 	}
 
 	job.Status = StatusSkipped
@@ -451,12 +451,12 @@ func (q *Queue) UpdateJobPhase(id string, phase Phase) error {
 
 	job, ok := q.jobs[id]
 	if !ok {
-		return fmt.Errorf("job not found: %s", id)
+		return jobNotFoundError(id)
 	}
 
 	// Only running jobs can have their phase updated
 	if job.Status != StatusRunning {
-		return fmt.Errorf("job %s is not running (status: %s)", id, job.Status)
+		return jobNotRunningError(id, job.Status)
 	}
 
 	job.Phase = phase
@@ -475,12 +475,12 @@ func (q *Queue) UpdateJobVMAFResult(id string, vmafScore float64, selectedCRF in
 
 	job, ok := q.jobs[id]
 	if !ok {
-		return fmt.Errorf("job not found: %s", id)
+		return jobNotFoundError(id)
 	}
 
 	// Only running jobs can have VMAF results updated
 	if job.Status != StatusRunning {
-		return fmt.Errorf("job %s is not running (status: %s)", id, job.Status)
+		return jobNotRunningError(id, job.Status)
 	}
 
 	job.VMafScore = vmafScore
@@ -499,7 +499,7 @@ func (q *Queue) CancelJob(id string) error {
 
 	job, ok := q.jobs[id]
 	if !ok {
-		return fmt.Errorf("job not found: %s", id)
+		return jobNotFoundError(id)
 	}
 
 	if job.IsTerminal() {
@@ -523,7 +523,7 @@ func (q *Queue) Requeue(id string) error {
 
 	job, ok := q.jobs[id]
 	if !ok {
-		return fmt.Errorf("job not found: %s", id)
+		return jobNotFoundError(id)
 	}
 
 	if job.Status != StatusRunning {

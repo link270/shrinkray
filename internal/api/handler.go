@@ -160,14 +160,9 @@ func (h *Handler) CreateJobs(w http.ResponseWriter, r *http.Request) {
 
 	// Validate SmartShrink quality if provided
 	smartShrinkQuality := req.SmartShrinkQuality
-	if smartShrinkQuality != "" {
-		switch smartShrinkQuality {
-		case "acceptable", "good", "excellent":
-			// Valid
-		default:
-			writeError(w, http.StatusBadRequest, "smartshrink_quality must be 'acceptable', 'good', or 'excellent'")
-			return
-		}
+	if smartShrinkQuality != "" && !jobs.IsValidSmartShrinkQuality(smartShrinkQuality) {
+		writeError(w, http.StatusBadRequest, "smartshrink_quality must be 'acceptable', 'good', or 'excellent'")
+		return
 	}
 
 	// Respond immediately - jobs will be added in background and appear via SSE
@@ -378,10 +373,7 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if req.Workers != nil && *req.Workers > 0 {
-		workers := *req.Workers
-		if workers > 6 {
-			workers = 6 // Cap at 6 workers
-		}
+		workers := jobs.ClampWorkerCount(*req.Workers)
 		// Dynamically resize the worker pool
 		h.workerPool.Resize(workers)
 	}
@@ -448,21 +440,18 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 		h.cfg.TonemapHDR = *req.TonemapHDR
 	}
 	if req.TonemapAlgorithm != nil {
-		// Validate algorithm
-		switch *req.TonemapAlgorithm {
-		case "hable", "bt2390", "reinhard", "mobius", "clip", "linear", "gamma":
-			h.cfg.TonemapAlgorithm = *req.TonemapAlgorithm
-		default:
+		if !config.IsValidTonemapAlgorithm(*req.TonemapAlgorithm) {
 			writeError(w, http.StatusBadRequest, "tonemap_algorithm must be one of: hable, bt2390, reinhard, mobius, clip, linear, gamma")
 			return
 		}
+		h.cfg.TonemapAlgorithm = *req.TonemapAlgorithm
 	}
 
 	// Handle max concurrent analyses (SmartShrink VMAF)
 	if req.MaxConcurrentAnalyses != nil {
 		val := *req.MaxConcurrentAnalyses
-		if val < 1 || val > 3 {
-			writeError(w, http.StatusBadRequest, "max_concurrent_analyses must be between 1 and 3")
+		if !jobs.IsValidAnalysisCount(val) {
+			writeError(w, http.StatusBadRequest, fmt.Sprintf("max_concurrent_analyses must be between %d and %d", jobs.MinConcurrentAnalyses, jobs.MaxConcurrentAnalyses))
 			return
 		}
 		val = vmaf.SetMaxConcurrentAnalyses(val)

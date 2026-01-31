@@ -151,18 +151,8 @@ func Load(path string) (*Config, error) {
 		cfg.OutputFormat = "mkv"
 	}
 
-	// Validate tonemapping algorithm
-	if cfg.TonemapAlgorithm == "" {
-		cfg.TonemapAlgorithm = "hable"
-	}
-	// Ensure it's a valid algorithm
-	switch cfg.TonemapAlgorithm {
-	case "hable", "bt2390", "reinhard", "mobius", "clip", "linear", "gamma":
-		// Valid algorithms
-	default:
-		// Unknown algorithm - fall back to hable
-		cfg.TonemapAlgorithm = "hable"
-	}
+	// Validate tonemapping algorithm (use shared validation)
+	cfg.TonemapAlgorithm = ValidateTonemapAlgorithm(cfg.TonemapAlgorithm)
 
 	// Validate max concurrent analyses (1-3)
 	if cfg.MaxConcurrentAnalyses < 1 {

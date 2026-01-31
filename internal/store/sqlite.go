@@ -487,11 +487,11 @@ func (s *SQLiteStore) ResetRunningJobs() (int, error) {
 }
 
 // Stats returns queue statistics including session and lifetime savings.
-func (s *SQLiteStore) Stats() (Stats, error) {
+func (s *SQLiteStore) Stats() (jobs.Stats, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
-	var stats Stats
+	var stats jobs.Stats
 
 	// Get session_saved and lifetime_saved counters from stats_metadata
 	var sessionSavedStr, lifetimeSavedStr string

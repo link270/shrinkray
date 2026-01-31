@@ -9,12 +9,3 @@ type AnalysisResult struct {
 	SkipReason  string  // Reason for skip
 	SamplesUsed int     // Number of samples analyzed
 }
-
-// Config holds configuration for VMAF analysis
-type Config struct {
-	FFmpegPath     string
-	TempDir        string
-	SampleDuration int     // seconds
-	FastAnalysis   bool    // single sample first
-	VMafThreshold  float64 // target VMAF score
-}

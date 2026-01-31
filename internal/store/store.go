@@ -55,7 +55,7 @@ type Store interface {
 	// NOTE: This method is primarily used for testing and benchmarks;
 	// production code uses the Queue's Stats method which combines
 	// store stats with runtime information.
-	Stats() (Stats, error)
+	Stats() (jobs.Stats, error)
 
 	// ResetSession resets the session start time to now.
 	// After reset, SessionSaved will start counting from 0.
@@ -67,18 +67,4 @@ type Store interface {
 
 	// Close closes the store and releases resources.
 	Close() error
-}
-
-// Stats holds queue statistics.
-type Stats struct {
-	Pending       int   `json:"pending"`
-	Running       int   `json:"running"`
-	Complete      int   `json:"complete"`
-	Failed        int   `json:"failed"`
-	Cancelled     int   `json:"cancelled"`
-	Skipped       int   `json:"skipped"`
-	Total         int   `json:"total"`
-	TotalSaved    int64 `json:"total_saved"`    // For API compatibility (= session_saved)
-	SessionSaved  int64 `json:"session_saved"`  // Bytes saved this session
-	LifetimeSaved int64 `json:"lifetime_saved"` // All-time bytes saved
 }
