@@ -908,9 +908,11 @@ func (wp *WorkerPool) runSmartShrinkAnalysis(ctx context.Context, job *Job, pres
 	analyzer := vmaf.NewAnalyzer(wp.cfg.FFmpegPath, tempDir)
 
 	// Set up tonemapping for HDR content with tonemapping enabled.
+	// Pass job.ColorTransfer so the scoring filtergraph uses the correct input transfer
+	// (smpte2084 for HDR10/DV, arib-std-b67 for HLG).
 	var encodeTonemapParams *ffmpeg.TonemapParams
 	if job.IsHDR && wp.cfg.TonemapHDR {
-		analyzer.WithTonemap(true, wp.cfg.TonemapAlgorithm)
+		analyzer.WithTonemap(true, wp.cfg.TonemapAlgorithm, job.ColorTransfer)
 	}
 
 	// Create encode callback

@@ -37,7 +37,8 @@ func TestBuildSDRScoringFilter(t *testing.T) {
 }
 
 func TestBuildHDRScoringFilter(t *testing.T) {
-	filter := buildHDRScoringFilter("vmaf_v0.6.1", 4, "hable")
+	// Test with HDR10 (smpte2084) - the default/most common case
+	filter := buildHDRScoringFilter("vmaf_v0.6.1", 4, "hable", "smpte2084")
 
 	// Distorted leg should be simple format conversion (already SDR)
 	if !strings.Contains(filter, "[0:v]format=yuv420p[dist]") {
@@ -112,12 +113,45 @@ func TestBuildHDRScoringFilter(t *testing.T) {
 	}
 }
 
+func TestBuildHDRScoringFilterHLG(t *testing.T) {
+	// Test with HLG (arib-std-b67) - requires different input transfer
+	filter := buildHDRScoringFilter("vmaf_v0.6.1", 4, "hable", "arib-std-b67")
+
+	// Should use HLG transfer function instead of PQ
+	if !strings.Contains(filter, "tin=arib-std-b67") {
+		t.Error("missing HLG transfer input (arib-std-b67)")
+	}
+	if strings.Contains(filter, "tin=smpte2084") {
+		t.Error("should NOT contain PQ transfer for HLG content")
+	}
+}
+
+func TestBuildHDRScoringFilterDefaultTransfer(t *testing.T) {
+	// Test fallback to smpte2084 when input transfer is empty or unknown
+	testCases := []struct {
+		name          string
+		inputTransfer string
+	}{
+		{"empty", ""},
+		{"unknown", "unknown_transfer"},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			filter := buildHDRScoringFilter("vmaf_v0.6.1", 4, "hable", tc.inputTransfer)
+			if !strings.Contains(filter, "tin=smpte2084") {
+				t.Errorf("should fallback to smpte2084 for %s input transfer", tc.name)
+			}
+		})
+	}
+}
+
 func TestBuildHDRScoringFilterAlgorithms(t *testing.T) {
 	algorithms := []string{"hable", "bt2390", "reinhard", "mobius"}
 
 	for _, algo := range algorithms {
 		t.Run(algo, func(t *testing.T) {
-			filter := buildHDRScoringFilter("vmaf_v0.6.1", 4, algo)
+			filter := buildHDRScoringFilter("vmaf_v0.6.1", 4, algo, "smpte2084")
 			expected := fmt.Sprintf("tonemap=%s:", algo)
 			if !strings.Contains(filter, expected) {
 				t.Errorf("expected tonemap algorithm %s, got filter: %s", algo, filter)

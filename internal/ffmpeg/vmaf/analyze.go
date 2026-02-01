@@ -12,8 +12,9 @@ import (
 
 // TonemapConfig holds tonemapping configuration for HDR content
 type TonemapConfig struct {
-	Enabled   bool   // True if HDR content should be tonemapped to SDR
-	Algorithm string // Tonemapping algorithm (hable, bt2390, etc.)
+	Enabled       bool   // True if HDR content should be tonemapped to SDR
+	Algorithm     string // Tonemapping algorithm (hable, bt2390, etc.)
+	InputTransfer string // Input transfer function (smpte2084 for HDR10/DV, arib-std-b67 for HLG)
 }
 
 // Analyzer orchestrates VMAF analysis for SmartShrink
@@ -31,11 +32,13 @@ func NewAnalyzer(ffmpegPath, tempDir string) *Analyzer {
 	}
 }
 
-// WithTonemap sets tonemapping configuration for HDR content
-func (a *Analyzer) WithTonemap(enabled bool, algorithm string) *Analyzer {
+// WithTonemap sets tonemapping configuration for HDR content.
+// inputTransfer should be the source transfer function: "smpte2084" for HDR10/DV, "arib-std-b67" for HLG.
+func (a *Analyzer) WithTonemap(enabled bool, algorithm, inputTransfer string) *Analyzer {
 	a.Tonemap = &TonemapConfig{
-		Enabled:   enabled,
-		Algorithm: algorithm,
+		Enabled:       enabled,
+		Algorithm:     algorithm,
+		InputTransfer: inputTransfer,
 	}
 	return a
 }

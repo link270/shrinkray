@@ -27,25 +27,38 @@ func buildSDRScoringFilter(model string, threads int) string {
 // Explicit color metadata ensures correct HDR interpretation.
 //
 // Pipeline order (tonemap requires linear light input):
-// 1. Linearize from PQ with explicit HDR metadata
+// 1. Linearize from PQ/HLG with explicit HDR metadata (inputTransfer determines tin=)
 // 2. Convert to float format for precision
 // 3. Convert primaries to bt709 (color space, still linear)
 // 4. Apply tonemap algorithm (operates on linear light)
 // 5. Apply bt709 transfer curve and matrix (gamma correction)
 // 6. Convert to yuv420p for VMAF
-func buildHDRScoringFilter(model string, threads int, algorithm string) string {
+//
+// inputTransfer should be "smpte2084" for HDR10/DV or "arib-std-b67" for HLG.
+// Falls back to "smpte2084" if empty or unknown.
+func buildHDRScoringFilter(model string, threads int, algorithm, inputTransfer string) string {
+	// Validate and normalize inputTransfer
+	// Known values: smpte2084 (HDR10, DV Profile 8), arib-std-b67 (HLG)
+	switch inputTransfer {
+	case "smpte2084", "arib-std-b67":
+		// Valid, use as-is
+	default:
+		// Unknown or empty, default to PQ (most common HDR format)
+		inputTransfer = "smpte2084"
+	}
+
 	// Distorted is already SDR (tonemapped during encoding)
 	// Reference is HDR, needs tonemapping before comparison
 	return fmt.Sprintf(
 		"[0:v]format=yuv420p[dist];"+
-			"[1:v]zscale=pin=bt2020:tin=smpte2084:min=bt2020nc:t=linear:npl=1000,"+
+			"[1:v]zscale=pin=bt2020:tin=%s:min=bt2020nc:t=linear:npl=1000,"+
 			"format=gbrpf32le,"+
 			"zscale=p=bt709,"+
 			"tonemap=%s:desat=0:peak=100,"+
 			"zscale=t=bt709:m=bt709,"+
 			"format=yuv420p[ref];"+
 			"[dist][ref]libvmaf=model=version=%s:n_threads=%d:log_fmt=json:log_path=/dev/stdout",
-		algorithm, model, threads)
+		inputTransfer, algorithm, model, threads)
 }
 
 // SetMaxConcurrentAnalyses configures the concurrent analysis limit and returns the clamped value.
@@ -86,7 +99,7 @@ func Score(ctx context.Context, ffmpegPath, referencePath, distortedPath string,
 		if algorithm == "" {
 			algorithm = "hable"
 		}
-		filterComplex = buildHDRScoringFilter(model, numThreads, algorithm)
+		filterComplex = buildHDRScoringFilter(model, numThreads, algorithm, tonemap.InputTransfer)
 	} else {
 		filterComplex = buildSDRScoringFilter(model, numThreads)
 	}
