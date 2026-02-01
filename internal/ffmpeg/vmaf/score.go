@@ -74,15 +74,11 @@ func SetMaxConcurrentAnalyses(n int) int {
 	return n
 }
 
-// GetThreadCount returns the number of threads each VMAF process should use.
-// Uses numCPU/2 to limit decoders and filters to ~50% CPU.
-// Note: Software encoders (x265, svtav1) ignore this and use all cores.
+// GetThreadCount returns the number of threads for VMAF scoring.
+// Uses numCPU/2 to maximize VMAF speed while leaving headroom for other work.
+// Combined with nice -n 19, this allows other processes to preempt when needed.
 func GetThreadCount() int {
-	numThreads := runtime.NumCPU() / 2
-	if numThreads < 1 {
-		numThreads = 1
-	}
-	return numThreads
+	return max(runtime.NumCPU()/2, 2)
 }
 
 // Score calculates the VMAF score between reference and distorted videos.
