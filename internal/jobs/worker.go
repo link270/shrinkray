@@ -926,8 +926,8 @@ func (wp *WorkerPool) runSmartShrinkAnalysis(ctx context.Context, job *Job, pres
 
 		outputPath := samplePath + ".encoded.mkv"
 
-		// Limit threads for consistent CPU usage (~50% per analysis)
-		numThreads := vmaf.GetThreadCount()
+		// Use full CPU for encoding since sample encoding is sequential
+		numThreads := vmaf.GetEncodingThreads()
 		threadStr := fmt.Sprintf("%d", numThreads)
 		args := make([]string, 0, len(inputArgs)+len(outputArgs)+8)
 		args = append(args, "-threads", threadStr, "-filter_threads", threadStr)
@@ -936,9 +936,7 @@ func (wp *WorkerPool) runSmartShrinkAnalysis(ctx context.Context, job *Job, pres
 		args = append(args, outputArgs...)
 		args = append(args, "-y", outputPath)
 
-		// Run with low CPU priority so VMAF analysis yields to other processes
-		niceArgs := append([]string{"-n", "19", wp.cfg.FFmpegPath}, args...)
-		cmd := exec.CommandContext(ctx, "nice", niceArgs...)
+		cmd := exec.CommandContext(ctx, wp.cfg.FFmpegPath, args...)
 		if err := cmd.Run(); err != nil {
 			return "", err
 		}

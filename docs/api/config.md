@@ -150,7 +150,7 @@ Send a test notification to verify Pushover credentials.
 
 - Changes are persisted to `/config/shrinkray.yaml`
 - Worker count changes take effect immediately (running jobs complete normally)
-- VMAF analyses run with low CPU priority (`nice -n 19`) and limited threads to avoid saturating the system
+- VMAF scoring runs samples in parallel for faster analysis; thread allocation respects container CPU limits
 - Some settings (`media_path`, `temp_path`, `keep_larger_files`) can only be changed in the config file
 - Quality value of 0 means "use encoder-specific default"
 - `allow_same_codec: true` enables HEVC→HEVC or AV1→AV1 re-encoding for bitrate optimization

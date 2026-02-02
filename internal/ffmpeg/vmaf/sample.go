@@ -85,9 +85,7 @@ func ExtractSamples(ctx context.Context, ffmpegPath, inputPath, tempDir string,
 			samplePath,
 		}
 
-		// Run with low CPU priority so VMAF analysis yields to other processes
-		niceArgs := append([]string{"-n", "19", ffmpegPath}, args...)
-		cmd := exec.CommandContext(ctx, "nice", niceArgs...)
+		cmd := exec.CommandContext(ctx, ffmpegPath, args...)
 		output, err := cmd.CombinedOutput()
 		if err != nil {
 			logger.Error("FFmpeg sample extraction failed", "sample", i, "error", err, "stderr", lastLines(string(output), 5))

@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Changed
+- **Parallel VMAF scoring** — Sample VMAF scores are now computed concurrently (up to 3 workers), significantly reducing scoring wall-clock time
+- **Container-aware threading** — Thread allocation now uses `GOMAXPROCS` instead of `NumCPU`, correctly respecting container CPU limits
+- **Removed CPU throttling** — VMAF scoring and sample extraction no longer run with `nice -n 19`; full CPU utilization improves iteration speed
+- **Removed JSON stdout logging** — VMAF filter no longer outputs verbose JSON to stdout; scores parsed from FFmpeg stderr summary
+
 ## [2.0.5] - 2026-01-31
 
 ### Added

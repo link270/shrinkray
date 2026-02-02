@@ -234,11 +234,11 @@ Older hardware falls back to software AV1 encoding (significantly slower but sti
 
 ### Why does SmartShrink use so much CPU?
 
-SmartShrink uses VMAF (Video Multi-Method Assessment Fusion) to analyze video quality. VMAF is CPU-only—there's no GPU acceleration. To minimize impact:
+SmartShrink uses VMAF (Video Multi-Method Assessment Fusion) to analyze video quality. VMAF is CPU-only—there's no GPU acceleration. To maximize throughput:
 
-- VMAF processes run at lowest CPU priority (`nice -n 19`) and yield to other work
-- Each analysis uses ~50% of CPU cores for decode/filter operations
-- Configure concurrent analyses (1-3) in Advanced settings based on your system
+- VMAF scoring runs samples in parallel (up to 3 concurrent scorers)
+- Thread allocation respects container CPU limits via `GOMAXPROCS`
+- Full CPU utilization during analysis minimizes wall-clock time per iteration
 
 ### How do quality settings work?
 

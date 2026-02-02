@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"syscall"
 	"time"
 
@@ -126,9 +127,13 @@ func main() {
 	// Logging deferred until after splash screen
 	vmaf.DetectVMAF(cfg.FFmpegPath)
 
-	// Configure VMAF thread limits based on max concurrent analyses setting
-	clampedMaxAnalyses := vmaf.SetMaxConcurrentAnalyses(cfg.MaxConcurrentAnalyses)
-	cfg.MaxConcurrentAnalyses = clampedMaxAnalyses
+	// Validate max concurrent analyses setting (clamped by jobs package)
+	if cfg.MaxConcurrentAnalyses < jobs.MinConcurrentAnalyses {
+		cfg.MaxConcurrentAnalyses = jobs.MinConcurrentAnalyses
+	}
+	if cfg.MaxConcurrentAnalyses > jobs.MaxConcurrentAnalyses {
+		cfg.MaxConcurrentAnalyses = jobs.MaxConcurrentAnalyses
+	}
 
 	// Initialize presets (depends on encoder AND VMAF detection)
 	ffmpeg.InitPresets()
@@ -181,7 +186,7 @@ func main() {
 	logger.Info("Shrinkray started", "version", shrinkray.Version, "encoder", best.Name, "workers", cfg.Workers, "port", *port)
 	if vmaf.IsAvailable() {
 		logger.Info("VMAF support detected", "models", vmaf.GetModels())
-		logger.Info("VMAF concurrent analyses configured", "max_analyses", clampedMaxAnalyses, "threads_per_analysis", vmaf.GetThreadCount())
+		logger.Info("VMAF scoring configured", "max_score_workers", vmaf.MaxScoreWorkers, "gomaxprocs", runtime.GOMAXPROCS(0))
 	} else {
 		logger.Info("VMAF not available - SmartShrink presets will be hidden")
 	}

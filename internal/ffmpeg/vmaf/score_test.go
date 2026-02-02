@@ -28,11 +28,12 @@ func TestBuildSDRScoringFilter(t *testing.T) {
 	if !strings.Contains(filter, "n_threads=4") {
 		t.Error("missing thread count")
 	}
-	if !strings.Contains(filter, "log_fmt=json") {
-		t.Error("missing json log format")
+	// JSON logging removed - score is parsed from FFmpeg stderr summary line
+	if strings.Contains(filter, "log_fmt=json") {
+		t.Error("unexpected json log format - should be removed")
 	}
-	if !strings.Contains(filter, "log_path=/dev/stdout") {
-		t.Error("missing stdout log path")
+	if strings.Contains(filter, "log_path=") {
+		t.Error("unexpected log_path - should be removed")
 	}
 }
 
@@ -168,13 +169,13 @@ func TestScoreSignatureAcceptsTonemap(t *testing.T) {
 	cancel() // Cancel immediately to avoid actual FFmpeg call
 
 	// SDR case - nil tonemap
-	_, err := Score(ctx, "ffmpeg", "ref.mkv", "dist.mkv", 1080, nil)
+	_, err := Score(ctx, "ffmpeg", "ref.mkv", "dist.mkv", 1080, 4, nil)
 	// Error expected due to cancelled context or missing files
 	_ = err
 
 	// HDR case - with tonemap config
 	tonemap := &TonemapConfig{Enabled: true, Algorithm: "hable"}
-	_, err = Score(ctx, "ffmpeg", "ref.mkv", "dist.mkv", 1080, tonemap)
+	_, err = Score(ctx, "ffmpeg", "ref.mkv", "dist.mkv", 1080, 4, tonemap)
 	// Error expected due to cancelled context or missing files
 	_ = err
 }

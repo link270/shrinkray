@@ -454,9 +454,8 @@ func (h *Handler) UpdateConfig(w http.ResponseWriter, r *http.Request) {
 			writeError(w, http.StatusBadRequest, fmt.Sprintf("max_concurrent_analyses must be between %d and %d", jobs.MinConcurrentAnalyses, jobs.MaxConcurrentAnalyses))
 			return
 		}
-		val = vmaf.SetMaxConcurrentAnalyses(val)
 		h.cfg.MaxConcurrentAnalyses = val
-		// Update the worker pool's analysis limit and VMAF thread calculation
+		// Update the worker pool's analysis limit
 		h.workerPool.SetAnalysisLimit(val)
 	}
 
