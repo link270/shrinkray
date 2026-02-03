@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.7] - 2026-02-03
+
+### Fixed
+- **HDR SmartShrink support** — SmartShrink presets now work with HDR content regardless of `TonemapHDR` setting
+  - VMAF scoring now tonemaps both reference and distorted legs to SDR for valid comparison
+  - Previously only the reference leg was tonemapped, assuming distorted was already SDR
+  - The `TonemapHDR` config setting only affects final transcode output, not VMAF analysis
+  - HDR files with missing `color_transfer` metadata are still blocked (required for tonemapping)
+
+### Changed
+- Removed unused `tonemap` parameter from `BuildSampleEncodeArgs` — samples stay in native format during VMAF analysis
+
 ## [2.0.6] - 2026-02-03
 
 ### Changed
