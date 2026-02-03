@@ -113,6 +113,16 @@ func (t *Transcoder) Transcode(
 	// inputArgs go before -i (hwaccel), outputArgs go after
 	inputArgs, outputArgs := BuildPresetArgs(preset, sourceBitrate, sourceWidth, sourceHeight, qualityHEVC, qualityAV1, qualityMod, softwareDecode, outputFormat, tonemap, subtitleIndices)
 
+	// Check if hardware decode is actually being used (presence of -hwaccel flag).
+	// This determines whether we need the first-frame watchdog to catch HW decode hangs.
+	hasHwDecode := false
+	for _, arg := range inputArgs {
+		if arg == "-hwaccel" {
+			hasHwDecode = true
+			break
+		}
+	}
+
 	// Build ffmpeg command
 	// Structure: ffmpeg [inputArgs] -i input [outputArgs] output
 	args := []string{}
@@ -149,35 +159,38 @@ func (t *Transcoder) Transcode(
 	// Track last frame count for error reporting
 	var lastFrameCount int64
 
-	// First frame detection: if FFmpeg produces no frames for 10 seconds,
-	// the decoder is likely stuck (e.g., VAAPI trying to decode unsupported codec).
-	// Kill FFmpeg early to trigger software decode retry instead of hanging indefinitely.
-	// 10 seconds is generous - most videos produce their first frame within 1-2 seconds.
-	const firstFrameTimeout = 10 * time.Second
-	firstFrameReceived := make(chan struct{})
-	var firstFrameClosed bool
-	var firstFrameMu sync.Mutex
+	// First frame signaling - progress parser signals when frame > 0 is observed.
+	// Used by watchdog (if enabled) to know decoding has started successfully.
+	firstFrameCh := make(chan struct{})
+	var firstFrameOnce sync.Once
 
-	// Start a watchdog goroutine to kill FFmpeg if no frames appear
-	go func() {
-		select {
-		case <-firstFrameReceived:
-			// First frame received, no need to kill
-			return
-		case <-time.After(firstFrameTimeout):
-			// No frames received within timeout - likely decode failure
-			// Kill FFmpeg to trigger retry with software decode
-			logger.Warn("FFmpeg produced no frames within timeout, killing process",
-				"timeout", firstFrameTimeout)
-			// Send SIGKILL to FFmpeg - context cancellation is cleaner but this is faster
-			if cmd.Process != nil {
-				_ = cmd.Process.Kill()
+	// Only enable watchdog for hardware decode (catches VAAPI/QSV decode hangs).
+	// Software decode (including libsvtav1) can legitimately take >10s for first frame
+	// due to lookahead buffers, threading init, etc. Issue #87.
+	if hasHwDecode {
+		const firstFrameTimeout = 10 * time.Second
+
+		// Start a watchdog goroutine to kill FFmpeg if no frames appear
+		go func() {
+			select {
+			case <-firstFrameCh:
+				// First frame received, no need to kill
+				return
+			case <-time.After(firstFrameTimeout):
+				// No frames received within timeout - likely decode failure
+				// Kill FFmpeg to trigger retry with software decode
+				logger.Warn("FFmpeg produced no frames within timeout, killing process",
+					"timeout", firstFrameTimeout)
+				// Send SIGKILL to FFmpeg - context cancellation is cleaner but this is faster
+				if cmd.Process != nil {
+					_ = cmd.Process.Kill()
+				}
+			case <-ctx.Done():
+				// Context cancelled (shutdown or job cancel), don't interfere
+				return
 			}
-		case <-ctx.Done():
-			// Context cancelled (shutdown or job cancel), don't interfere
-			return
-		}
-	}()
+		}()
+	}
 
 	// Parse progress from stdout
 	go func() {
@@ -196,14 +209,9 @@ func (t *Transcoder) Transcode(
 				case "frame":
 					currentProgress.Frame, _ = strconv.ParseInt(value, 10, 64)
 					lastFrameCount = currentProgress.Frame
-					// Signal first frame received to cancel the watchdog
+					// Signal first frame received to cancel the watchdog (if running)
 					if currentProgress.Frame > 0 {
-						firstFrameMu.Lock()
-						if !firstFrameClosed {
-							close(firstFrameReceived)
-							firstFrameClosed = true
-						}
-						firstFrameMu.Unlock()
+						firstFrameOnce.Do(func() { close(firstFrameCh) })
 					}
 				case "fps":
 					currentProgress.FPS, _ = strconv.ParseFloat(value, 64)
