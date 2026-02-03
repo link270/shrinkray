@@ -12,8 +12,9 @@ import (
 
 // TonemapConfig holds tonemapping configuration for HDR content
 type TonemapConfig struct {
-	Enabled   bool   // True if HDR content should be tonemapped to SDR
-	Algorithm string // Tonemapping algorithm (hable, bt2390, etc.)
+	Enabled       bool   // True if HDR content should be tonemapped to SDR
+	Algorithm     string // Tonemapping algorithm (hable, bt2390, etc.)
+	InputTransfer string // Input transfer function (smpte2084 for HDR10/DV, arib-std-b67 for HLG)
 }
 
 // Analyzer orchestrates VMAF analysis for SmartShrink
@@ -31,11 +32,13 @@ func NewAnalyzer(ffmpegPath, tempDir string) *Analyzer {
 	}
 }
 
-// WithTonemap sets tonemapping configuration for HDR content
-func (a *Analyzer) WithTonemap(enabled bool, algorithm string) *Analyzer {
+// WithTonemap sets tonemapping configuration for HDR content.
+// inputTransfer should be the source transfer function: "smpte2084" for HDR10/DV, "arib-std-b67" for HLG.
+func (a *Analyzer) WithTonemap(enabled bool, algorithm, inputTransfer string) *Analyzer {
 	a.Tonemap = &TonemapConfig{
-		Enabled:   enabled,
-		Algorithm: algorithm,
+		Enabled:       enabled,
+		Algorithm:     algorithm,
+		InputTransfer: inputTransfer,
 	}
 	return a
 }
@@ -57,7 +60,7 @@ func (a *Analyzer) Analyze(ctx context.Context, inputPath string, videoDuration 
 	}
 	defer os.RemoveAll(analysisDir)
 
-	// Get sample positions (5 fixed positions)
+	// Get sample positions (3 positions at 25%, 50%, 75%)
 	positions := SamplePositions(videoDuration)
 
 	logger.Info("Starting VMAF analysis",
@@ -65,19 +68,20 @@ func (a *Analyzer) Analyze(ctx context.Context, inputPath string, videoDuration 
 		"samples", len(positions),
 		"threshold", threshold)
 
-	// Extract reference samples
+	// Extract reference samples using stream copy (fast, no tonemap)
+	// Tonemapping for HDR content is handled during VMAF scoring instead
 	extractStart := time.Now()
 	referenceSamples, err := ExtractSamples(ctx, a.FFmpegPath, inputPath, analysisDir,
-		videoDuration, positions, a.Tonemap)
+		videoDuration, positions)
 	if err != nil {
 		return nil, fmt.Errorf("extracting samples: %w", err)
 	}
 	logger.Info("Sample extraction complete", "duration", time.Since(extractStart).String())
 	defer CleanupSamples(referenceSamples)
 
-	// Run binary search
+	// Run binary search with tonemap config
 	searchStart := time.Now()
-	result, err := BinarySearch(ctx, a.FFmpegPath, referenceSamples, qRange, threshold, height, encodeSample)
+	result, err := BinarySearch(ctx, a.FFmpegPath, referenceSamples, qRange, threshold, height, a.Tonemap, encodeSample)
 	searchDuration := time.Since(searchStart)
 	if err != nil {
 		return nil, fmt.Errorf("binary search: %w", err)

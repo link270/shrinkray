@@ -6,64 +6,117 @@ import (
 	"os/exec"
 	"regexp"
 	"runtime"
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/gwlsn/shrinkray/internal/logger"
+	"golang.org/x/sync/errgroup"
 )
 
-// SetMaxConcurrentAnalyses configures the concurrent analysis limit and returns the clamped value.
-// Thread count per analysis is fixed at ~50% CPU (numCPU/2) regardless of this setting.
-// Multiple concurrent analyses can stack to use more total CPU.
-// Note: This currently only validates/clamps the value; actual limiting happens elsewhere.
-func SetMaxConcurrentAnalyses(n int) int {
-	if n < 1 {
-		n = 1
-	}
-	if n > 3 {
-		n = 3
-	}
-	return n
+// buildSDRScoringFilter creates a filtergraph for SDR VMAF comparison.
+// Both legs are normalized to yuv420p before libvmaf.
+// Score is extracted from FFmpeg's stderr summary line (no JSON logging needed).
+func buildSDRScoringFilter(model string, threads int) string {
+	return fmt.Sprintf(
+		"[0:v]format=yuv420p[dist];[1:v]format=yuv420p[ref];"+
+			"[dist][ref]libvmaf=model=version=%s:n_threads=%d",
+		model, threads)
 }
 
-// GetThreadCount returns the number of threads each VMAF process should use.
-// Uses numCPU/2 to limit decoders and filters to ~50% CPU.
-// Note: Software encoders (x265, svtav1) ignore this and use all cores.
-func GetThreadCount() int {
-	numThreads := runtime.NumCPU() / 2
-	if numThreads < 1 {
-		numThreads = 1
+// buildHDRScoringFilter creates a filtergraph for HDR VMAF comparison.
+// The reference leg is tonemapped from HDR to SDR to match the distorted leg.
+// Explicit color metadata ensures correct HDR interpretation.
+//
+// Pipeline order (tonemap requires linear light input):
+// 1. Linearize from PQ/HLG with explicit HDR metadata (inputTransfer determines tin=)
+// 2. Convert to float format for precision
+// 3. Convert primaries to bt709 (color space, still linear)
+// 4. Apply tonemap algorithm (operates on linear light)
+// 5. Apply bt709 transfer curve and matrix (gamma correction)
+// 6. Convert to yuv420p for VMAF
+//
+// inputTransfer should be "smpte2084" for HDR10/DV or "arib-std-b67" for HLG.
+// Falls back to "smpte2084" if empty or unknown.
+func buildHDRScoringFilter(model string, threads int, algorithm, inputTransfer string) string {
+	// Validate and normalize inputTransfer
+	// Known values: smpte2084 (HDR10, DV Profile 8), arib-std-b67 (HLG)
+	switch inputTransfer {
+	case "smpte2084", "arib-std-b67":
+		// Valid, use as-is
+	default:
+		// Unknown or empty, default to PQ (most common HDR format)
+		inputTransfer = "smpte2084"
 	}
-	return numThreads
+
+	// Distorted is already SDR (tonemapped during encoding)
+	// Reference is HDR, needs tonemapping before comparison
+	// Score is extracted from FFmpeg's stderr summary line (no JSON logging needed).
+	return fmt.Sprintf(
+		"[0:v]format=yuv420p[dist];"+
+			"[1:v]zscale=pin=bt2020:tin=%s:min=bt2020nc:t=linear:npl=1000,"+
+			"format=gbrpf32le,"+
+			"zscale=p=bt709,"+
+			"tonemap=%s:desat=0:peak=100,"+
+			"zscale=t=bt709:m=bt709,"+
+			"format=yuv420p[ref];"+
+			"[dist][ref]libvmaf=model=version=%s:n_threads=%d",
+		inputTransfer, algorithm, model, threads)
 }
 
-// Score calculates the VMAF score between reference and distorted videos
-func Score(ctx context.Context, ffmpegPath, referencePath, distortedPath string, height int) (float64, error) {
+// MaxScoreWorkers is the maximum number of concurrent VMAF scoring workers.
+// Matches the number of samples (3) from SamplePositions.
+const MaxScoreWorkers = 3
+
+// getThreadsPerWorker calculates threads per scoring worker based on available CPU.
+// Uses GOMAXPROCS (container-aware in Go 1.21+) divided by worker count.
+// This distributes CPU evenly across concurrent scorers without oversubscription.
+func getThreadsPerWorker(workers int) int {
+	procs := runtime.GOMAXPROCS(0)
+	threads := procs / workers
+	if threads < 1 {
+		threads = 1
+	}
+	return threads
+}
+
+// GetEncodingThreads returns the number of threads for sample encoding during VMAF search.
+// Uses GOMAXPROCS for full CPU utilization since sample encoding is sequential.
+func GetEncodingThreads() int {
+	procs := runtime.GOMAXPROCS(0)
+	if procs < 1 {
+		procs = 1
+	}
+	return procs
+}
+
+// Score calculates the VMAF score between reference and distorted videos.
+// When tonemap is provided and enabled, the reference is tonemapped from HDR to SDR.
+// The threads parameter controls parallelism for FFmpeg and libvmaf.
+func Score(ctx context.Context, ffmpegPath, referencePath, distortedPath string, height, threads int, tonemap *TonemapConfig) (float64, error) {
 	model := SelectModel(height)
 
-	// Get thread count based on configured max concurrent analyses
-	// This targets ~50% total CPU usage across all concurrent VMAF processes
-	numThreads := GetThreadCount()
-
-	// Build VMAF filter
-	// Input order: [0:v] = distorted (encoded), [1:v] = reference (original)
-	// libvmaf compares distorted against reference
-	// Use /dev/stdout for log_path as some FFmpeg builds don't support "-"
-	vmafFilter := fmt.Sprintf("[0:v][1:v]libvmaf=model=version=%s:n_threads=%d:log_fmt=json:log_path=/dev/stdout", model, numThreads)
+	// Build appropriate filtergraph based on HDR/SDR
+	var filterComplex string
+	if tonemap != nil && tonemap.Enabled {
+		algorithm := tonemap.Algorithm
+		if algorithm == "" {
+			algorithm = "hable"
+		}
+		filterComplex = buildHDRScoringFilter(model, threads, algorithm, tonemap.InputTransfer)
+	} else {
+		filterComplex = buildSDRScoringFilter(model, threads)
+	}
 
 	args := []string{
-		"-threads", fmt.Sprintf("%d", numThreads),        // Limit decoder threads
-		"-filter_threads", fmt.Sprintf("%d", numThreads), // Limit filter graph threads
-		"-i", distortedPath,                              // Input 0: distorted/encoded sample
-		"-i", referencePath,                              // Input 1: reference/original sample
-		"-filter_complex", vmafFilter,
+		"-threads", fmt.Sprintf("%d", threads),
+		"-filter_threads", fmt.Sprintf("%d", threads),
+		"-i", distortedPath,
+		"-i", referencePath,
+		"-filter_complex", filterComplex,
 		"-f", "null", "-",
 	}
 
-	// Run with low CPU priority so VMAF analysis yields to other processes
-	niceArgs := append([]string{"-n", "19", ffmpegPath}, args...)
-	cmd := exec.CommandContext(ctx, "nice", niceArgs...)
+	cmd := exec.CommandContext(ctx, ffmpegPath, args...)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		logger.Error("VMAF scoring failed", "error", err, "stderr", lastLines(string(output), 5))
@@ -96,53 +149,58 @@ func parseVMAFScore(output string) (float64, error) {
 	return 0, fmt.Errorf("could not parse VMAF score from output")
 }
 
-// trimmedMean calculates the trimmed mean of VMAF scores.
-// Drops the highest and lowest scores, averages the rest.
-// For 1-2 scores, returns simple average. For 3 scores, returns median.
-func trimmedMean(scores []float64) float64 {
+// averageScores returns the mean of VMAF scores.
+func averageScores(scores []float64) float64 {
 	if len(scores) == 0 {
 		return 0
 	}
-	if len(scores) == 1 {
-		return scores[0]
-	}
-	if len(scores) == 2 {
-		return (scores[0] + scores[1]) / 2
-	}
-
-	// Sort a copy to avoid modifying original
-	sorted := make([]float64, len(scores))
-	copy(sorted, scores)
-	sort.Float64s(sorted)
-
-	// Drop lowest and highest, average the rest
 	sum := 0.0
-	for i := 1; i < len(sorted)-1; i++ {
-		sum += sorted[i]
+	for _, s := range scores {
+		sum += s
 	}
-	return sum / float64(len(sorted)-2)
+	return sum / float64(len(scores))
 }
 
-// ScoreSamples calculates VMAF for multiple sample pairs and returns the trimmed mean.
-// Drops the highest and lowest scores, averages the middle scores.
-// This is more robust than minimum (too conservative) or average (ignores outliers).
-func ScoreSamples(ctx context.Context, ffmpegPath string, referenceSamples, distortedSamples []*Sample, height int) (float64, error) {
+// ScoreSamples calculates VMAF for multiple sample pairs concurrently and returns the average.
+// Samples are scored in parallel (up to MaxScoreWorkers) with threads distributed evenly.
+// When tonemap is provided and enabled, references are tonemapped from HDR to SDR.
+func ScoreSamples(ctx context.Context, ffmpegPath string, referenceSamples, distortedSamples []*Sample, height int, tonemap *TonemapConfig) (float64, error) {
 	if len(referenceSamples) != len(distortedSamples) {
 		return 0, fmt.Errorf("sample count mismatch: %d vs %d", len(referenceSamples), len(distortedSamples))
 	}
 
-	scores := make([]float64, 0, len(referenceSamples))
+	numSamples := len(referenceSamples)
+	workers := min(numSamples, MaxScoreWorkers)
+	threadsPerWorker := getThreadsPerWorker(workers)
+
+	logger.Debug("Scoring samples concurrently",
+		"samples", numSamples,
+		"workers", workers,
+		"threadsPerWorker", threadsPerWorker,
+		"gomaxprocs", runtime.GOMAXPROCS(0))
+
+	// Pre-allocate results slice to collect scores by index (preserves ordering)
+	scores := make([]float64, numSamples)
+
+	g, gctx := errgroup.WithContext(ctx)
 
 	for i := range referenceSamples {
-		score, err := Score(ctx, ffmpegPath, referenceSamples[i].Path, distortedSamples[i].Path, height)
-		if err != nil {
-			return 0, fmt.Errorf("scoring sample %d: %w", i, err)
-		}
-		logger.Debug("Sample VMAF score", "sample", i, "score", score)
-		scores = append(scores, score)
+		g.Go(func() error {
+			score, err := Score(gctx, ffmpegPath, referenceSamples[i].Path, distortedSamples[i].Path, height, threadsPerWorker, tonemap)
+			if err != nil {
+				return fmt.Errorf("scoring sample %d: %w", i, err)
+			}
+			logger.Debug("Sample VMAF score", "sample", i, "score", score)
+			scores[i] = score
+			return nil
+		})
 	}
 
-	result := trimmedMean(scores)
-	logger.Info("VMAF trimmed mean", "scores", scores, "result", result)
+	if err := g.Wait(); err != nil {
+		return 0, err
+	}
+
+	result := averageScores(scores)
+	logger.Info("VMAF score", "scores", scores, "average", result)
 	return result, nil
 }
