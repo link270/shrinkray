@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.6] - 2026-02-03
+
 ### Changed
 - **Parallel VMAF scoring** — Sample VMAF scores are now computed concurrently (up to 3 workers), significantly reducing scoring wall-clock time
 - **Container-aware threading** — Thread allocation now uses `GOMAXPROCS` instead of `NumCPU`, correctly respecting container CPU limits
