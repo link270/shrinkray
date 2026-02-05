@@ -13,6 +13,20 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
+// vmafModel is the VMAF model used for all scoring.
+// Always HD model since scoring happens at ≤1080p.
+const vmafModel = "vmaf_v0.6.1"
+
+// scoringHeight returns the height used for VMAF scoring.
+// Content >1080p is downscaled to 1080; content ≤1080p stays native.
+// Unknown/zero height defaults to 1080 as a safety cap against OOM.
+func scoringHeight(inputH int) int {
+	if inputH <= 0 || inputH > 1080 {
+		return 1080
+	}
+	return inputH &^ 1 // ensure even
+}
+
 // buildSDRScoringFilter creates a filtergraph for SDR VMAF comparison.
 // Both legs are normalized to yuv420p before libvmaf.
 // Score is extracted from FFmpeg's stderr summary line (no JSON logging needed).

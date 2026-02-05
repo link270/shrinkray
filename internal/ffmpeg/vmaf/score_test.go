@@ -179,6 +179,34 @@ func TestScoreSamplesSignatureAcceptsTonemap(t *testing.T) {
 	_ = err
 }
 
+func TestScoringHeight(t *testing.T) {
+	tests := []struct {
+		name   string
+		inputH int
+		wantH  int
+	}{
+		{"4K downscales to 1080", 2160, 1080},
+		{"1440p downscales to 1080", 1440, 1080},
+		{"1082 downscales to 1080", 1082, 1080},
+		{"1081 downscales to 1080", 1081, 1080},
+		{"1080 stays native", 1080, 1080},
+		{"720 stays native", 720, 720},
+		{"480 stays native", 480, 480},
+		{"odd height 719 gets even-clamped", 719, 718},
+		{"odd height 1079 gets even-clamped", 1079, 1078},
+		{"zero defaults to 1080", 0, 1080},
+		{"negative defaults to 1080", -1, 1080},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := scoringHeight(tt.inputH)
+			if got != tt.wantH {
+				t.Errorf("scoringHeight(%d) = %d, want %d", tt.inputH, got, tt.wantH)
+			}
+		})
+	}
+}
+
 func TestAverageScores(t *testing.T) {
 	tests := []struct {
 		name     string
