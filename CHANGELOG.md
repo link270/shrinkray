@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.0.8] - 2026-02-05
+
+### Fixed
+- **4K HDR SmartShrink OOM crash** (#90) — VMAF analysis on 4K+ content no longer causes FFmpeg to be OOM-killed in containers
+  - Content >1080p is now downscaled to 1080p before VMAF scoring, reducing memory from ~6GB to ~1.5GB per scorer
+  - HDR downscale happens in linear light via combined zscale call (linearize + resize in one pass) for mathematically correct resampling
+  - SDR downscale uses standard `scale` filter with aspect-ratio preservation (`-2:1080`)
+  - Unknown/zero height defaults to 1080 as safety cap
+  - Always uses HD VMAF model (`vmaf_v0.6.1`) since scoring happens at ≤1080p
+
+### Changed
+- Removed `SelectModel` function — replaced with `vmafModel` constant since only the HD model is ever used
+
 ## [2.0.7] - 2026-02-03
 
 ### Fixed
