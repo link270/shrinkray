@@ -67,7 +67,28 @@ func TestBrowser(t *testing.T) {
 		t.Errorf("expected 1 entry (TV Shows), got %d", len(result.Entries))
 	}
 
+	// First browse triggers background computation; counts may be 0
 	t.Logf("Root browse: %d entries", len(result.Entries))
+
+	// Wait for background goroutines to finish populating count cache
+	time.Sleep(200 * time.Millisecond)
+
+	// Second browse should return cached recursive counts
+	result, err = browser.Browse(ctx, tmpDir)
+	if err != nil {
+		t.Fatalf("Browse (cached) failed: %v", err)
+	}
+
+	if len(result.Entries) == 1 {
+		tvEntry := result.Entries[0]
+		if tvEntry.FileCount != 3 {
+			t.Errorf("expected TV Shows folder to recursively report 3 videos, got %d", tvEntry.FileCount)
+		}
+		// Each fake video file is 18 bytes ("fake video content"), so 3 × 18 = 54
+		if tvEntry.TotalSize != 54 {
+			t.Errorf("expected TV Shows folder to recursively report 54 bytes total size, got %d", tvEntry.TotalSize)
+		}
+	}
 
 	// Test browsing into TV Shows
 	result, err = browser.Browse(ctx, tvDir)
@@ -79,7 +100,24 @@ func TestBrowser(t *testing.T) {
 		t.Errorf("expected parent %s, got %s", tmpDir, result.Parent)
 	}
 
+	// First browse triggers background count for "Test Show"
 	t.Logf("TV Shows browse: %d entries", len(result.Entries))
+	time.Sleep(200 * time.Millisecond)
+
+	// Second browse returns cached counts
+	result, err = browser.Browse(ctx, tvDir)
+	if err != nil {
+		t.Fatalf("Browse TV Shows (cached) failed: %v", err)
+	}
+
+	if len(result.Entries) == 1 {
+		showEntry := result.Entries[0]
+		if showEntry.FileCount != 3 {
+			t.Errorf("expected Test Show folder to recursively report 3 videos, got %d", showEntry.FileCount)
+		}
+	}
+
+	t.Logf("TV Shows browse (cached): %d entries", len(result.Entries))
 
 	// Test browsing into Season 1
 	result, err = browser.Browse(ctx, seasonDir)

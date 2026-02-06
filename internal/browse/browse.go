@@ -2,6 +2,7 @@ package browse
 
 import (
 	"context"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,6 +13,8 @@ import (
 	"time"
 
 	"github.com/gwlsn/shrinkray/internal/ffmpeg"
+	"github.com/gwlsn/shrinkray/internal/logger"
+	"golang.org/x/sync/singleflight"
 )
 
 // ProgressCallback is called during file discovery to report progress
@@ -38,6 +41,12 @@ type BrowseResult struct {
 	TotalSize  int64    `json:"total_size"`  // Total size of video files
 }
 
+// dirCount holds cached recursive video counts for a directory
+type dirCount struct {
+	fileCount int
+	totalSize int64
+}
+
 // Browser handles file system browsing with video metadata
 type Browser struct {
 	prober    *ffmpeg.Prober
@@ -46,6 +55,16 @@ type Browser struct {
 	// Cache for probe results (path -> result)
 	cacheMu sync.RWMutex
 	cache   map[string]*ffmpeg.ProbeResult
+
+	// Cache for recursive directory video counts
+	countCacheMu sync.RWMutex
+	countCache   map[string]*dirCount
+
+	// Deduplicates concurrent countVideos calls for the same directory
+	countGroup singleflight.Group
+
+	// Limits concurrent directory walks to avoid overwhelming network shares
+	countSem chan struct{}
 }
 
 // NewBrowser creates a new Browser with the given prober and media root
@@ -56,9 +75,11 @@ func NewBrowser(prober *ffmpeg.Prober, mediaRoot string) *Browser {
 		absRoot = mediaRoot
 	}
 	return &Browser{
-		prober:    prober,
-		mediaRoot: absRoot,
-		cache:     make(map[string]*ffmpeg.ProbeResult),
+		prober:     prober,
+		mediaRoot:  absRoot,
+		cache:      make(map[string]*ffmpeg.ProbeResult),
+		countCache: make(map[string]*dirCount),
+		countSem:   make(chan struct{}, 8),
 	}
 }
 
@@ -119,8 +140,20 @@ func (b *Browser) Browse(ctx context.Context, path string) (*BrowseResult, error
 		}
 
 		if e.IsDir() {
-			// For directories, count video files (non-recursive for speed)
-			entry.FileCount, entry.TotalSize = b.countVideos(entryPath)
+			// Non-blocking: return cached counts instantly, or fire background
+			// computation so counts appear on the next browse.
+			b.countCacheMu.RLock()
+			cached, isCached := b.countCache[entryPath]
+			b.countCacheMu.RUnlock()
+
+			if isCached {
+				entry.FileCount = cached.fileCount
+				entry.TotalSize = cached.totalSize
+			} else {
+				// Populate cache in background (detached context so it completes
+				// even after this HTTP response is sent)
+				go b.countVideos(context.Background(), entryPath)
+			}
 		} else if ffmpeg.IsVideoFile(e.Name()) {
 			// For video files, get probe info (with caching)
 			wg.Add(1)
@@ -158,25 +191,68 @@ func (b *Browser) Browse(ctx context.Context, path string) (*BrowseResult, error
 	return result, nil
 }
 
-// countVideos counts video files in a directory (non-recursive for speed)
-func (b *Browser) countVideos(dirPath string) (count int, totalSize int64) {
-	entries, err := os.ReadDir(dirPath)
-	if err != nil {
-		return 0, 0
+// countVideos counts video files in a directory recursively.
+// Uses three layers of optimization:
+//   - Cache: instant return for previously-walked directories
+//   - Singleflight: deduplicates concurrent walks for the same directory
+//   - WalkDir: avoids stat syscalls on non-video files (big win on network FS)
+func (b *Browser) countVideos(ctx context.Context, dirPath string) (int, int64) {
+	// Check cache first (fast path, no allocation)
+	b.countCacheMu.RLock()
+	if cached, ok := b.countCache[dirPath]; ok {
+		b.countCacheMu.RUnlock()
+		return cached.fileCount, cached.totalSize
 	}
+	b.countCacheMu.RUnlock()
 
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
+	// Singleflight: if another goroutine is already walking this directory,
+	// wait for its result instead of doing duplicate work
+	v, _, _ := b.countGroup.Do(dirPath, func() (interface{}, error) {
+		// Double-check cache (another goroutine in the same group may have filled it)
+		b.countCacheMu.RLock()
+		if cached, ok := b.countCache[dirPath]; ok {
+			b.countCacheMu.RUnlock()
+			return cached, nil
 		}
-		if ffmpeg.IsVideoFile(e.Name()) {
-			count++
-			if info, err := e.Info(); err == nil {
-				totalSize += info.Size()
+		b.countCacheMu.RUnlock()
+
+		// Rate-limit concurrent walks to avoid overwhelming network shares
+		b.countSem <- struct{}{}
+		defer func() { <-b.countSem }()
+
+		var count int
+		var totalSize int64
+		// WalkDir avoids stat on every entry — only calls Info() for video files
+		_ = filepath.WalkDir(dirPath, func(path string, d fs.DirEntry, err error) error {
+			if ctx.Err() != nil {
+				return filepath.SkipAll
 			}
+			if err != nil || d.IsDir() {
+				return nil
+			}
+			if ffmpeg.IsVideoFile(d.Name()) {
+				if info, infoErr := d.Info(); infoErr == nil {
+					count++
+					totalSize += info.Size()
+				}
+			}
+			return nil
+		})
+
+		dc := &dirCount{count, totalSize}
+		// Only cache if context wasn't cancelled (partial results would be wrong)
+		if ctx.Err() == nil {
+			b.countCacheMu.Lock()
+			b.countCache[dirPath] = dc
+			b.countCacheMu.Unlock()
 		}
+		return dc, nil
+	})
+
+	if dc, ok := v.(*dirCount); ok {
+		return dc.fileCount, dc.totalSize
 	}
-	return count, totalSize
+	return 0, 0
 }
 
 // getProbeResult returns a cached or fresh probe result.
@@ -308,18 +384,127 @@ func (b *Browser) GetVideoFilesWithProgress(ctx context.Context, paths []string,
 	return results, nil
 }
 
-// ClearCache clears the probe cache (useful after transcoding completes)
+// ClearCache clears the probe cache (useful after transcoding completes).
+// Directory count cache is preserved since file counts don't change after transcoding.
 func (b *Browser) ClearCache() {
 	b.cacheMu.Lock()
 	b.cache = make(map[string]*ffmpeg.ProbeResult)
 	b.cacheMu.Unlock()
 }
 
-// InvalidateCache removes a specific path from the cache
+// InvalidateCache removes a specific path from the probe cache and clears
+// directory count caches for all ancestor directories (since their recursive
+// counts include this file).
 func (b *Browser) InvalidateCache(path string) {
 	b.cacheMu.Lock()
 	delete(b.cache, path)
 	b.cacheMu.Unlock()
+
+	// Invalidate count cache for every ancestor directory up to media root.
+	// Use path-boundary check to avoid matching e.g. /mnt/mediastuff when root is /mnt/media.
+	rootPrefix := b.mediaRoot + string(os.PathSeparator)
+	b.countCacheMu.Lock()
+	dir := filepath.Dir(path)
+	for dir == b.mediaRoot || strings.HasPrefix(dir, rootPrefix) {
+		delete(b.countCache, dir)
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			break // reached filesystem root
+		}
+		dir = parent
+	}
+	b.countCacheMu.Unlock()
+}
+
+// WarmCountCache pre-computes recursive video counts for all directories
+// under the media root in a single pass. Call this in a background goroutine
+// at startup so counts are ready by the time the user opens the UI.
+func (b *Browser) WarmCountCache(ctx context.Context) {
+	start := time.Now()
+	logger.Info("Warming directory count cache", "media_root", b.mediaRoot)
+
+	dirCounts := make(map[string]*dirCount)
+	rootPrefix := b.mediaRoot + string(os.PathSeparator)
+	var videoCount int
+
+	_ = filepath.WalkDir(b.mediaRoot, func(path string, d fs.DirEntry, err error) error {
+		if ctx.Err() != nil {
+			return filepath.SkipAll
+		}
+		if err != nil {
+			return nil
+		}
+		// Skip hidden entries
+		if strings.HasPrefix(d.Name(), ".") {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			// Ensure every directory gets a cache entry (even if 0 videos)
+			if _, ok := dirCounts[path]; !ok {
+				dirCounts[path] = &dirCount{}
+			}
+			return nil
+		}
+		if !ffmpeg.IsVideoFile(d.Name()) {
+			return nil
+		}
+
+		// Only stat video files (WalkDir skips stat for non-video entries)
+		info, infoErr := d.Info()
+		if infoErr != nil {
+			return nil
+		}
+
+		videoCount++
+
+		// Propagate this file's count and size to every ancestor directory
+		dir := filepath.Dir(path)
+		for dir == b.mediaRoot || strings.HasPrefix(dir, rootPrefix) {
+			dc, ok := dirCounts[dir]
+			if !ok {
+				dc = &dirCount{}
+				dirCounts[dir] = dc
+			}
+			dc.fileCount++
+			dc.totalSize += info.Size()
+
+			parent := filepath.Dir(dir)
+			if parent == dir {
+				break
+			}
+			dir = parent
+		}
+		return nil
+	})
+
+	// Populate cache in chunks to avoid holding the lock for too long
+	// (Browse calls need the read lock to return cached counts)
+	if ctx.Err() == nil {
+		const chunkSize = 500
+		chunk := 0
+		for dir, dc := range dirCounts {
+			if chunk%chunkSize == 0 {
+				if chunk > 0 {
+					b.countCacheMu.Unlock()
+				}
+				b.countCacheMu.Lock()
+			}
+			b.countCache[dir] = dc
+			chunk++
+		}
+		if chunk > 0 {
+			b.countCacheMu.Unlock()
+		}
+
+		logger.Info("Directory count cache warmed",
+			"directories", len(dirCounts),
+			"videos", videoCount,
+			"duration", time.Since(start).Round(time.Millisecond),
+		)
+	}
 }
 
 // ProbeFile probes a single file and returns its metadata

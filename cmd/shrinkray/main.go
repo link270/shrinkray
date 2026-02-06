@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"net/http"
@@ -184,6 +185,7 @@ func main() {
 	fmt.Printf("  Logging started (level: %s)\n", cfg.LogLevel)
 	fmt.Println("─────────────────────────────────────────────────────────────")
 	logger.Info("Shrinkray started", "version", shrinkray.Version, "encoder", best.Name, "workers", cfg.Workers, "port", *port)
+	go browser.WarmCountCache(context.Background())
 	if vmaf.IsAvailable() {
 		logger.Info("VMAF support detected", "models", vmaf.GetModels())
 		logger.Info("VMAF scoring configured", "max_score_workers", vmaf.MaxScoreWorkers, "gomaxprocs", runtime.GOMAXPROCS(0))
