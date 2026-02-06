@@ -14,10 +14,11 @@ Returns current configuration with encoder defaults.
 
 ```json
 {
-  "version": "1.8.0",
+  "version": "2.0.8",
   "media_path": "/media",
   "original_handling": "replace",
   "workers": 2,
+  "max_concurrent_analyses": 1,
   "has_temp_path": true,
   "pushover_user_key": "u...",
   "pushover_app_token": "a...",

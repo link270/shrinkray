@@ -72,10 +72,10 @@ This ensures jobs complete even when specific encoders fail on certain content. 
 
 | Priority | Encoder | Platform | Why |
 |----------|---------|----------|-----|
-| 1 | NVENC | NVIDIA GPUs | Best quality/speed, wide support |
-| 2 | Quick Sync | Intel CPUs | Good quality, low power |
-| 3 | VAAPI | AMD/Intel Linux | Broad Linux support |
-| 4 | VideoToolbox | macOS | Native Apple hardware |
+| 1 | VideoToolbox | macOS | Native Apple hardware |
+| 2 | NVENC | NVIDIA GPUs | Best quality/speed, wide support |
+| 3 | Quick Sync | Intel CPUs | Good quality, low power |
+| 4 | VAAPI | AMD/Intel Linux | Broad Linux support |
 | 5 | Software | All | Universal fallback |
 
 ## Full GPU pipeline
@@ -334,7 +334,7 @@ The `RequiresSoftwareDecode()` function detects these before encoding starts, av
 
 ## Docker GPU passthrough
 
-### NVIDIA
+### NVIDIA (standard Docker)
 
 ```yaml
 services:
@@ -342,28 +342,49 @@ services:
     runtime: nvidia
     environment:
       - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
 ```
 
-Or with `--gpus all` flag.
+Or with `--runtime=nvidia --gpus all` flags. Requires the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) on the host.
 
-### Intel/AMD
+### Intel/AMD (standard Docker)
 
 ```yaml
 services:
   shrinkray:
     devices:
       - /dev/dri:/dev/dri
+    environment:
+      - PGID=<render group GID>
 ```
 
-The container user needs permission to access `/dev/dri` devices (usually `video` or `render` group).
+The container user needs permission to access `/dev/dri` devices. Set PGID to the group that owns `/dev/dri/renderD128` on the host (check with `ls -la /dev/dri`).
+
+### NVIDIA (Unraid)
+
+Unraid requires the **Nvidia-Driver** plugin from Community Applications.
+
+1. Install the Nvidia-Driver plugin and reboot
+2. In the Docker template (Advanced View), add `--runtime=nvidia` to Extra Parameters
+3. Add environment variable `NVIDIA_VISIBLE_DEVICES` = `all` (or a specific GPU UUID from the plugin page for multi-GPU systems)
+4. Add environment variable `NVIDIA_DRIVER_CAPABILITIES` = `all`
+
+If Docker won't start after adding `--runtime=nvidia`, restart Docker in Settings (disable, apply, enable, apply).
+
+### Intel/AMD (Unraid)
+
+1. Add `--device=/dev/dri` to Extra Parameters in the Docker template
+
+The LinuxServer base image automatically handles device permissions inside the container.
 
 ## Troubleshooting
 
 **No hardware encoder detected:**
 
-1. Check GPU is passed through to container
-2. Verify driver is installed
-3. Check Shrinkray logs at startup for detection output
+1. Check GPU is passed through to container (`ls /dev/dri` inside container for Intel/AMD, `nvidia-smi` for NVIDIA)
+2. Verify driver is installed on the host
+3. Check PGID matches the render device group
+4. Check Shrinkray logs at startup for detection output (use `log_level: debug` for full details)
 
 **Jobs show "SW" badge unexpectedly:**
 
@@ -373,6 +394,6 @@ The container user needs permission to access `/dev/dri` devices (usually `video
 
 **Intel QSV not working:**
 
-1. Ensure `/dev/dri` is passed through
-2. Set PUID/PGID matching host user
-3. User must be in `video` or `render` group
+1. Ensure `/dev/dri/renderD128` is passed through (not just `/dev/dri`)
+2. Set PGID to the group that owns the render device
+3. On standard Linux, your user must be in both the `render` and `video` groups

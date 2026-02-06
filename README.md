@@ -5,7 +5,7 @@
   <p>Select a folder. Pick a preset. Shrink your media library.</p>
 
   ![Version](https://img.shields.io/github/v/release/gwlsn/shrinkray?style=flat-square&label=version)
-  ![Go](https://img.shields.io/badge/go-1.22+-00ADD8?style=flat-square&logo=go)
+  ![Go](https://img.shields.io/badge/go-1.25+-00ADD8?style=flat-square&logo=go)
   ![License](https://img.shields.io/badge/license-MIT-green?style=flat-square)
   ![Docker](https://img.shields.io/badge/docker-ghcr.io-2496ED?style=flat-square&logo=docker)
 </div>
@@ -42,13 +42,13 @@ Shrinkray is a user-friendly video transcoding tool designed to be simple from t
 
 ## Quick Start
 
-### Unraid (Community Applications)
+### Unraid
 
-1. Search **"Shrinkray"** in Community Applications
-2. Install and configure paths:
-   - `/config` → Your appdata location
-   - `/media` → Your media library
-3. For GPU acceleration, pass through your GPU device (see [Hardware Acceleration](#hardware-acceleration))
+1. Search **"Shrinkray"** in Community Applications and install
+2. Set your paths: `/config` → appdata location, `/media` → media library
+3. **GPU setup (recommended):**
+   - **NVIDIA:** Install the Nvidia-Driver plugin (reboot after), add `--runtime=nvidia` to Extra Parameters, set `NVIDIA_VISIBLE_DEVICES=all` and `NVIDIA_DRIVER_CAPABILITIES=all` as environment variables
+   - **Intel / AMD:** Add `--device=/dev/dri` to Extra Parameters
 4. Open the WebUI at port **8080**
 
 ### Docker Compose
@@ -67,34 +67,41 @@ services:
     environment:
       - PUID=1000
       - PGID=1000
+    # GPU: uncomment the section for your hardware
+    # --- Intel / AMD ---
+    # devices:
+    #   - /dev/dri:/dev/dri
+    # --- NVIDIA ---
+    # runtime: nvidia
+    # environment:
+    #   - NVIDIA_VISIBLE_DEVICES=all
+    #   - NVIDIA_DRIVER_CAPABILITIES=all
     restart: unless-stopped
 ```
 
-### Docker CLI
+### From Source
+
+Requires Go 1.25+ and FFmpeg with HEVC/AV1 encoder support.
 
 ```bash
-docker run -d \
-  --name shrinkray \
-  -p 8080:8080 \
-  -e PUID=1000 \
-  -e PGID=1000 \
-  -v /path/to/config:/config \
-  -v /path/to/media:/media \
-  ghcr.io/gwlsn/shrinkray:latest
+go build -o shrinkray ./cmd/shrinkray
+./shrinkray -media /path/to/media
 ```
+
+Open `http://localhost:8080` in your browser. GPU acceleration is used automatically if available.
 
 ---
 
 ## Presets
 
-| Preset | Codec | Description | Theoretical Savings |
-|--------|-------|-------------|-----------------|
-| **SmartShrink (HEVC)** | H.265 | VMAF-guided auto-optimization | Varies by quality tier |
-| **SmartShrink (AV1)** | AV1 | VMAF-guided auto-optimization | Varies by quality tier |
-| **Compress (HEVC)** | H.265 | Re-encode to HEVC | 40–60% smaller |
-| **Compress (AV1)** | AV1 | Re-encode to AV1 | 50–70% smaller |
-| **1080p** | HEVC | Downscale 4K → 1080p | 60–80% smaller |
-| **720p** | HEVC | Downscale to 720p | 70–85% smaller |
+| Preset | Codec | Description |
+|--------|-------|-------------|
+| **SmartShrink (HEVC)** | H.265 | VMAF-guided auto-optimization |
+| **SmartShrink (AV1)** | AV1 | VMAF-guided auto-optimization |
+| **Compress (HEVC)** | H.265 | Re-encode to HEVC |
+| **Compress (AV1)** | AV1 | Re-encode to AV1 |
+| **1080p** | HEVC | Downscale 4K to 1080p |
+| **720p** | HEVC | Downscale to 720p |
 
 ### SmartShrink Quality Tiers
 
@@ -106,7 +113,7 @@ SmartShrink analyzes your video using VMAF to find the optimal compression setti
 | **Good** | 90 | Minimal perceptible difference (default) |
 | **Excellent** | 94 | Visually lossless |
 
-By default (MKV output), audio and subtitles are copied unchanged. MP4 output mode converts audio to AAC stereo and strips subtitles for web compatibility.
+By default (MKV output), audio is copied unchanged and compatible subtitles are preserved (incompatible formats like `mov_text` are automatically filtered with a warning). MP4 output mode converts audio to AAC stereo and strips subtitles for web compatibility.
 
 ---
 
@@ -116,23 +123,48 @@ Shrinkray automatically detects and uses the best available hardware encoder. No
 
 ### Supported Hardware
 
-| Platform | Requirements | Docker Flags |
-|----------|--------------|--------------|
-| **NVIDIA (NVENC)** | GTX 1050+ / RTX series | `--runtime=nvidia --gpus all` |
-| **Intel (Quick Sync)** | 6th gen+ CPU or Arc GPU | `--device /dev/dri:/dev/dri` |
-| **AMD (VAAPI)** | Polaris+ GPU on Linux | `--device /dev/dri:/dev/dri` |
-| **Apple (VideoToolbox)** | Any Mac (M1+) | Native or Docker* |
+| Platform | Requirements |
+|----------|--------------|
+| **NVIDIA (NVENC)** | GTX 1050+ / RTX series |
+| **Intel (Quick Sync)** | 6th gen+ CPU or Arc GPU |
+| **AMD (VAAPI)** | Polaris+ GPU on Linux |
+| **Apple (VideoToolbox)** | Any Mac (M1+) |
 
-> **\*Mac users:** The Docker image works on Apple Silicon, but containers run Linux and cannot access macOS VideoToolbox. For hardware-accelerated encoding, run Shrinkray natively ([Building from Source](#building-from-source)). Docker is convenient if you prefer containerization over GPU encoding speed.
+> **Mac users:** The Docker image works on Apple Silicon, but containers run Linux and cannot access macOS VideoToolbox. For hardware-accelerated encoding, run Shrinkray natively ([From Source](#from-source)).
 
 ### Unraid GPU Passthrough
 
 **NVIDIA:**
-1. Install the **Nvidia-Driver** plugin from Community Applications
-2. Add to container Extra Parameters: `--runtime=nvidia --gpus all`
+1. Install the **Nvidia-Driver** plugin from Community Applications and reboot
+2. Add `--runtime=nvidia` to Extra Parameters
+3. Add environment variables: `NVIDIA_VISIBLE_DEVICES=all` and `NVIDIA_DRIVER_CAPABILITIES=all`
 
 **Intel / AMD:**
-1. Add to container Extra Parameters: `--device /dev/dri:/dev/dri`
+1. Add `--device=/dev/dri` to Extra Parameters
+
+### Docker GPU Passthrough
+
+**NVIDIA** (requires [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html)):
+
+```yaml
+services:
+  shrinkray:
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+```
+
+**Intel / AMD:**
+
+```yaml
+services:
+  shrinkray:
+    devices:
+      - /dev/dri:/dev/dri
+```
+
+See the [FAQ](docs/FAQ.md#hardware-acceleration) for detailed setup and troubleshooting.
 
 ### Verifying Detection
 
@@ -178,7 +210,7 @@ Configuration is stored in `/config/shrinkray.yaml`. Most settings are available
 | `allow_same_codec` | `false` | Allow HEVC→HEVC or AV1→AV1 re-encoding |
 | `output_format` | `mkv` | Output container: `mkv` (preserves all streams) or `mp4` (web compatible) |
 | `tonemap_hdr` | `false` | Convert HDR content to SDR (uses CPU tonemapping) |
-| `tonemap_algorithm` | `hable` | Tonemapping algorithm: `hable`, `bt2390`, `reinhard`, `mobius` |
+| `tonemap_algorithm` | `hable` | Tonemapping algorithm: `hable`, `bt2390`, `reinhard`, `mobius`, `clip`, `linear`, `gamma` |
 | `max_concurrent_analyses` | `1` | Simultaneous SmartShrink VMAF analyses (1–3) |
 
 ### Example Configuration
@@ -207,29 +239,6 @@ Get push notifications when your transcode queue completes.
 4. Enable **"Notify when done"** before starting jobs
 
 Notifications include: completed/failed job counts, total space saved.
-
----
-
-## Building from Source
-
-```bash
-# Clone the repository
-git clone https://github.com/gwlsn/shrinkray.git
-cd shrinkray
-
-# Build
-go build -o shrinkray ./cmd/shrinkray
-
-# Run locally
-./shrinkray -media /path/to/media
-
-# Run tests
-go test ./...
-```
-
-**Requirements:**
-- Go 1.22+
-- FFmpeg with HEVC/AV1 encoder support
 
 ---
 

@@ -22,7 +22,12 @@ Add files or directories to the transcoding queue. The endpoint responds immedia
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
 | `paths` | string[] | Yes | File or directory paths to transcode |
-| `preset_id` | string | Yes | Preset ID: `compress-hevc`, `compress-av1`, `1080p`, `720p` |
+| `preset_id` | string | Yes | Preset ID (see below) |
+| `smartshrink_quality` | string | For SmartShrink | Quality tier: `acceptable`, `good`, `excellent` |
+
+**Preset IDs:** `compress-hevc`, `compress-av1`, `smartshrink-hevc`, `smartshrink-av1`, `1080p`, `720p`
+
+SmartShrink presets require the `smartshrink_quality` field. See [Presets](presets.md#smartshrink-presets) for quality tier details.
 
 **Response** (202 Accepted):
 

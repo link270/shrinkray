@@ -21,7 +21,7 @@ A simple video transcoding tool with a web UI. Point it at your media library, p
 
 ### What are the requirements?
 
-- **Docker** or **Go 1.22+** for building from source
+- **Docker** or **Go 1.25+** for building from source
 - **FFmpeg** with HEVC/AV1 encoder support (included in Docker image)
 - Optional: GPU for hardware acceleration (NVIDIA, Intel, AMD, or Apple Silicon)
 
@@ -40,7 +40,7 @@ services:
       - /path/to/media:/media
 ```
 
-**Unraid**: Search "Shrinkray" in Community Applications and configure paths.
+**Unraid**: Search "Shrinkray" in Community Applications and configure paths. For GPU setup see [Unraid GPU setup](#unraid-gpu-setup).
 
 **From source**:
 
@@ -95,7 +95,7 @@ Docker is still useful if you prefer containerization and don't mind slower soft
 | `schedule_end_hour` | `6` | Hour transcoding must stop (0-23) |
 | `output_format` | `mkv` | Output container: `mkv` or `mp4` |
 | `tonemap_hdr` | `false` | Convert HDR to SDR (uses CPU) |
-| `tonemap_algorithm` | `hable` | Algorithm: `hable`, `bt2390`, `reinhard`, `mobius` |
+| `tonemap_algorithm` | `hable` | Algorithm: `hable`, `bt2390`, `reinhard`, `mobius`, `clip`, `linear`, `gamma` |
 | `keep_larger_files` | `false` | Keep output even if larger than original |
 | `log_level` | `info` | Logging: `debug`, `info`, `warn`, `error` |
 
@@ -103,7 +103,17 @@ Most settings are editable via the web UI (Settings gear icon).
 
 ### Can I use environment variables?
 
-Not directly. Edit `/config/shrinkray.yaml` or use the web UI.
+A few paths can be set via environment variables:
+
+| Variable | Description |
+|----------|-------------|
+| `CONFIG_PATH` | Path to config file |
+| `MEDIA_PATH` | Override media path from config |
+| `TEMP_PATH` | Override temp path from config |
+
+If `temp_path` is not set and `/temp` exists as a mount, it is used automatically.
+
+All other settings should be edited in `/config/shrinkray.yaml` or via the web UI.
 
 ### How do I set up Pushover notifications?
 
@@ -130,13 +140,15 @@ Yes. Enable scheduling in Settings and set start/end hours. Example: start at 22
 
 ### Which encoders does Shrinkray support?
 
-| Platform | Encoder | HEVC | AV1 | Docker Flags |
-|----------|---------|------|-----|--------------|
-| **NVIDIA** | NVENC | GTX 1050+ | RTX 40+ | `--runtime=nvidia --gpus all` |
-| **Intel** | Quick Sync | 6th gen+ | Arc GPUs | `--device /dev/dri:/dev/dri` |
-| **AMD** | VAAPI | Polaris+ | RX 7000+ | `--device /dev/dri:/dev/dri` |
-| **Apple** | VideoToolbox | Any Mac | M3+ | Native (no Docker) |
-| **None** | Software | Always | Always | No flags needed |
+| Platform | Encoder | HEVC | AV1 |
+|----------|---------|------|-----|
+| **NVIDIA** | NVENC | GTX 1050+ | RTX 40+ |
+| **Intel** | Quick Sync | 6th gen+ | Arc GPUs |
+| **AMD** | VAAPI | Polaris+ | RX 7000+ |
+| **Apple** | VideoToolbox | Any Mac | M3+ |
+| **None** | Software | Always | Always |
+
+GPU setup varies by platform. See [Docker GPU setup](#docker-gpu-setup) or [Unraid GPU setup](#unraid-gpu-setup) below.
 
 ### How does encoder detection work?
 
@@ -171,31 +183,78 @@ This is normal. The GPU handles video encode/decode, but the CPU still handles:
 
 Standard monitoring tools may show 0% even when hardware encoding works correctly. AMD GPUs use a dedicated video engine (UVD/VCN) not reported by generic tools. Use `radeontop` which shows UVD/VCN utilization separately.
 
-### Intel Quick Sync (QSV) not working?
+### Docker GPU setup
 
-Common causes on Linux (non-Unraid):
+Standard Docker (not Unraid) setup for GPU passthrough:
 
-1. **Missing device passthrough**: Add `--device /dev/dri:/dev/dri`
-2. **Permission issues**: Set `PUID`/`PGID` matching your host user
-3. **Wrong group**: Your user must be in `video` or `render` group
+**NVIDIA:**
 
-Troubleshooting:
+```yaml
+services:
+  shrinkray:
+    runtime: nvidia
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=all
+```
+
+Or with CLI flags: `--runtime=nvidia --gpus all`
+
+Requires the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) installed on the host.
+
+**Intel / AMD:**
+
+```yaml
+services:
+  shrinkray:
+    devices:
+      - /dev/dri:/dev/dri
+    environment:
+      - PGID=<render group GID>
+```
+
+Find your render group GID by running `ls -la /dev/dri` on the host. The group that owns `renderD128` is the one you need. Set PGID to that group's ID, or add your user to it.
+
+**Troubleshooting (Linux):**
 
 ```bash
-# Check device permissions
+# Check device permissions and which group owns the render device
 ls -la /dev/dri
 
 # Check your groups
 id
 
-# Add yourself to video group if needed
-sudo usermod -aG video $USER
+# Add yourself to the render and video groups if needed
+sudo usermod -aG render,video $USER
 # Then re-login
 ```
 
 Try `PUID=0` temporarily to confirm it's a permissions issue.
 
 See [Hardware acceleration docs](architecture/hardware.md) for details.
+
+### Unraid GPU setup
+
+Unraid handles GPU passthrough differently from standard Docker. The flags in most Docker guides won't work as-is.
+
+**NVIDIA on Unraid:**
+
+1. Install the **Nvidia-Driver** plugin from Community Applications and reboot
+2. In the Docker template (Advanced View), add `--runtime=nvidia` to Extra Parameters
+3. Add environment variable `NVIDIA_VISIBLE_DEVICES` = `all` (or a specific GPU UUID from the Nvidia-Driver plugin page for multi-GPU systems)
+4. Add environment variable `NVIDIA_DRIVER_CAPABILITIES` = `all`
+
+If Docker won't start after adding `--runtime=nvidia`, restart Docker in Settings (disable, apply, enable, apply).
+
+**Intel / AMD on Unraid:**
+
+1. Add `--device=/dev/dri` to Extra Parameters in the Docker template
+
+The LinuxServer base image automatically handles device permissions inside the container.
+
+**Verify it's working:**
+
+After starting the container, open a terminal into it and run `ls -la /dev/dri`. If you see `renderD128` (Intel/AMD) or can run `nvidia-smi` (NVIDIA), the device is passed through. Then check the Shrinkray startup logs for encoder detection output. Set `log_level: debug` for full details.
 
 ### What hardware supports AV1 encoding?
 

@@ -21,8 +21,7 @@ Returns all available presets with their assigned encoder.
     "encoder": "nvenc",
     "codec": "hevc",
     "max_height": 0,
-    "is_smart_shrink": true,
-    "skips_codec_check": true
+    "is_smart_shrink": true
   },
   {
     "id": "smartshrink-av1",
@@ -31,8 +30,7 @@ Returns all available presets with their assigned encoder.
     "encoder": "nvenc",
     "codec": "av1",
     "max_height": 0,
-    "is_smart_shrink": true,
-    "skips_codec_check": true
+    "is_smart_shrink": true
   },
   {
     "id": "compress-hevc",
@@ -41,8 +39,7 @@ Returns all available presets with their assigned encoder.
     "encoder": "nvenc",
     "codec": "hevc",
     "max_height": 0,
-    "is_smart_shrink": false,
-    "skips_codec_check": false
+    "is_smart_shrink": false
   },
   {
     "id": "compress-av1",
@@ -51,8 +48,7 @@ Returns all available presets with their assigned encoder.
     "encoder": "nvenc",
     "codec": "av1",
     "max_height": 0,
-    "is_smart_shrink": false,
-    "skips_codec_check": false
+    "is_smart_shrink": false
   },
   {
     "id": "1080p",
@@ -61,8 +57,7 @@ Returns all available presets with their assigned encoder.
     "encoder": "nvenc",
     "codec": "hevc",
     "max_height": 1080,
-    "is_smart_shrink": false,
-    "skips_codec_check": false
+    "is_smart_shrink": false
   },
   {
     "id": "720p",
@@ -71,8 +66,7 @@ Returns all available presets with their assigned encoder.
     "encoder": "nvenc",
     "codec": "hevc",
     "max_height": 720,
-    "is_smart_shrink": false,
-    "skips_codec_check": false
+    "is_smart_shrink": false
   }
 ]
 ```
@@ -88,7 +82,6 @@ Returns all available presets with their assigned encoder.
 | `codec` | string | Target codec: `hevc` or `av1` |
 | `max_height` | int | Max output height (0 = no scaling) |
 | `is_smart_shrink` | bool | True for VMAF-based SmartShrink presets |
-| `skips_codec_check` | bool | True if preset bypasses same-codec skip logic |
 
 ### SmartShrink presets
 
@@ -123,71 +116,72 @@ Returns all detected hardware encoders and which one is selected as best.
 {
   "encoders": [
     {
-      "name": "NVIDIA NVENC",
       "accel": "nvenc",
-      "available": true,
-      "hevc": true,
-      "av1": true
+      "codec": "hevc",
+      "name": "NVIDIA NVENC",
+      "description": "NVIDIA hardware encoding (HEVC)",
+      "encoder": "hevc_nvenc",
+      "available": true
     },
     {
-      "name": "Intel Quick Sync",
-      "accel": "qsv",
-      "available": false,
-      "hevc": false,
-      "av1": false
+      "accel": "nvenc",
+      "codec": "av1",
+      "name": "NVIDIA NVENC",
+      "description": "NVIDIA hardware encoding (AV1)",
+      "encoder": "av1_nvenc",
+      "available": true
     },
     {
-      "name": "VAAPI (Linux)",
-      "accel": "vaapi",
-      "available": false,
-      "hevc": false,
-      "av1": false
-    },
-    {
-      "name": "Apple VideoToolbox",
-      "accel": "videotoolbox",
-      "available": false,
-      "hevc": false,
-      "av1": false
-    },
-    {
-      "name": "Software (CPU)",
       "accel": "none",
-      "available": true,
-      "hevc": true,
-      "av1": true
+      "codec": "hevc",
+      "name": "Software",
+      "description": "CPU encoding (HEVC)",
+      "encoder": "libx265",
+      "available": true
+    },
+    {
+      "accel": "none",
+      "codec": "av1",
+      "name": "Software",
+      "description": "CPU encoding (AV1)",
+      "encoder": "libsvtav1",
+      "available": true
     }
   ],
   "best": {
-    "name": "NVIDIA NVENC",
     "accel": "nvenc",
-    "available": true,
-    "hevc": true,
-    "av1": true
+    "codec": "hevc",
+    "name": "NVIDIA NVENC",
+    "description": "NVIDIA hardware encoding (HEVC)",
+    "encoder": "hevc_nvenc",
+    "available": true
   },
   "vmaf_available": true,
-  "vmaf_models": ["vmaf_v0.6.1", "vmaf_4k_v0.6.1"]
+  "vmaf_models": ["vmaf_v0.6.1"]
 }
 ```
+
+The `encoders` array contains one entry per accel+codec combination (e.g., separate entries for NVENC HEVC and NVENC AV1). Only available encoders are included. The `best` field returns the best available HEVC encoder.
 
 ### Encoder fields
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `accel` | string | Acceleration type: `nvenc`, `qsv`, `vaapi`, `videotoolbox`, `none` |
+| `codec` | string | Target codec: `hevc` or `av1` |
 | `name` | string | Human-readable encoder name |
-| `accel` | string | Encoder type: `nvenc`, `qsv`, `vaapi`, `videotoolbox`, `none` |
+| `description` | string | Encoder description |
+| `encoder` | string | FFmpeg encoder name (e.g., `hevc_nvenc`, `libx265`) |
 | `available` | bool | Whether encoder was successfully detected |
-| `hevc` | bool | HEVC encoding supported |
-| `av1` | bool | AV1 encoding supported |
 
 ## Hardware encoder priority
 
 Shrinkray automatically selects the best available encoder in this order:
 
-1. **NVIDIA NVENC** - Best quality/speed balance, wide GPU support
-2. **Intel Quick Sync** - Good for Intel CPUs with integrated graphics
-3. **AMD VAAPI** - Linux AMD GPU encoding
-4. **Apple VideoToolbox** - macOS hardware encoding
+1. **Apple VideoToolbox** - Native macOS hardware encoding
+2. **NVIDIA NVENC** - Best quality/speed balance, wide GPU support
+3. **Intel Quick Sync** - Good for Intel CPUs with integrated graphics
+4. **AMD VAAPI** - Linux AMD GPU encoding
 5. **Software** - CPU fallback (libx265/libsvtav1)
 
 ## Codec support by hardware
