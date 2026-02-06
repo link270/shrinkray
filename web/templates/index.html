@@ -570,6 +570,34 @@
             user-select: none;
         }
 
+        .file-list-controls {
+            margin-left: auto;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .file-list-controls label {
+            font-size: 0.75rem;
+            color: var(--text-tertiary);
+        }
+
+        .file-sort-select {
+            padding: 6px 10px;
+            border: 1px solid var(--border);
+            border-radius: var(--radius-sm);
+            font-size: 0.75rem;
+            font-family: var(--font-sans);
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+            cursor: pointer;
+        }
+
+        .file-sort-select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+
         .file-item {
             display: flex;
             align-items: center;
@@ -1952,6 +1980,13 @@
                             Select all
                         </label>
                         <span id="selection-count"></span>
+                        <div class="file-list-controls">
+                            <label for="browse-sort">Sort</label>
+                            <select class="file-sort-select" id="browse-sort" onchange="setBrowseSort(this.value)">
+                                <option value="name" selected>Alphabetical</option>
+                                <option value="size">Size (largest)</option>
+                            </select>
+                        </div>
                     </div>
                     <ul class="file-list" id="file-list">
                         <li class="loading">
@@ -2334,6 +2369,8 @@
         let selectedPaths = new Set();
         let selectedFileCounts = new Map();  // Track file count for each selected path (1 for files, N for folders)
         let totalSelectableCount = 0;  // Track total selectable items to avoid DOM queries
+        let browseSort = 'name';
+        let lastBrowseEntries = [];
         let eventSource = null;
 
         // Preset dropdown state
@@ -2357,6 +2394,118 @@
             if (h > 0) return `${h}h ${m}m`;
             if (m > 0) return `${m}m ${s}s`;
             return `${s}s`;
+        }
+
+        function getBrowseEntrySize(entry) {
+            if (entry.is_dir) {
+                return typeof entry.total_size === 'number' ? entry.total_size : 0;
+            }
+            return typeof entry.size === 'number' ? entry.size : 0;
+        }
+
+        function sortBrowseEntries(entries) {
+            const sorted = entries.slice();
+            sorted.sort((a, b) => {
+                if (a.is_dir !== b.is_dir) {
+                    return a.is_dir ? -1 : 1;
+                }
+
+                if (browseSort === 'size') {
+                    const aSize = getBrowseEntrySize(a);
+                    const bSize = getBrowseEntrySize(b);
+                    if (aSize !== bSize) {
+                        return bSize - aSize;
+                    }
+                }
+
+                const aName = (a.name || '').toLowerCase();
+                const bName = (b.name || '').toLowerCase();
+                if (aName < bName) return -1;
+                if (aName > bName) return 1;
+                return 0;
+            });
+            return sorted;
+        }
+
+        function renderBrowseEntries(entries) {
+            const list = document.getElementById('file-list');
+            const header = document.getElementById('file-list-header');
+            if (!entries || entries.length === 0) {
+                list.innerHTML = '<li class="file-list-empty">This folder is empty</li>';
+                header.classList.add('hidden');
+                totalSelectableCount = 0;
+                updateButtons();
+                return;
+            }
+
+            // Count selectable items (videos or folders) to avoid DOM queries later
+            totalSelectableCount = entries.filter(e =>
+                (!e.is_dir && e.video_info) || e.is_dir
+            ).length;
+
+            if (totalSelectableCount > 0) {
+                header.classList.remove('hidden');
+            } else {
+                header.classList.add('hidden');
+            }
+
+            list.innerHTML = entries.map(entry => {
+                const isVideo = !entry.is_dir && entry.video_info;
+                const isFolder = entry.is_dir;
+                const isSelectable = isVideo || isFolder;
+                const iconClass = entry.is_dir ? 'folder' : (isVideo ? 'video' : 'other');
+                const icon = entry.is_dir
+                    ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`
+                    : isVideo
+                        ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>`
+                        : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+
+                let metaHtml = '';
+                // For folders, file_count is the number of videos inside; for videos it's 1
+                const fileCount = entry.is_dir ? (entry.file_count || 0) : (isVideo ? 1 : 0);
+                if (entry.is_dir) {
+                    const count = entry.file_count || 0;
+                    if (count > 0) {
+                        const size = formatBytes(entry.total_size || 0);
+                        metaHtml = `<span>${count} video${count !== 1 ? 's' : ''}</span><span>${size}</span>`;
+                    }
+                } else if (isVideo) {
+                    const vi = entry.video_info;
+                    const codec = vi.video_codec?.toLowerCase() || '';
+                    let codecClass = 'h264';
+                    if (codec.includes('hevc') || codec.includes('h265')) {
+                        codecClass = 'hevc';
+                    } else if (codec.includes('av1')) {
+                        codecClass = 'av1';
+                    }
+                    const hdrBadge = vi.is_hdr ? '<span class="codec-badge hdr">HDR</span>' : '';
+                    metaHtml = `<span class="codec-badge ${codecClass}">${vi.video_codec}</span>${hdrBadge}<span>${vi.width}x${vi.height}</span>`;
+                }
+
+                const isSelected = selectedPaths.has(entry.path);
+                if (isSelected && !selectedFileCounts.has(entry.path)) {
+                    selectedFileCounts.set(entry.path, fileCount);
+                }
+
+                return `<li class="file-item${isSelected ? ' selected' : ''}" data-path="${entry.path}" data-is-dir="${entry.is_dir}" onclick="handleFileClick(this, event)">
+                    ${isSelectable ? `<input type="checkbox" class="file-checkbox" onclick="handleCheckbox(this, event)" data-path="${entry.path}" data-file-count="${fileCount}" ${isSelected ? 'checked' : ''}>` : '<div style="width: 18px"></div>'}
+                    <div class="file-icon ${iconClass}">${icon}</div>
+                    <div class="file-info">
+                        <div class="file-name">${entry.name}</div>
+                        <div class="file-meta">${metaHtml}</div>
+                    </div>
+                    ${entry.is_dir ? '' : `<div class="file-size">${formatBytes(entry.size)}</div>`}
+                </li>`;
+            }).join('');
+
+            updateButtons();
+        }
+
+        function setBrowseSort(value) {
+            browseSort = value;
+            if (lastBrowseEntries && lastBrowseEntries.length > 0) {
+                renderBrowseEntries(sortBrowseEntries(lastBrowseEntries));
+            }
         }
 
         function toggleJobDetails(jobId) {
@@ -2440,71 +2589,8 @@
                 breadcrumb.innerHTML = crumbs;
 
                 // Update file list
-                const list = document.getElementById('file-list');
-                if (data.entries.length === 0) {
-                    list.innerHTML = '<li class="file-list-empty">This folder is empty</li>';
-                    document.getElementById('file-list-header').classList.add('hidden');
-                    return;
-                }
-
-                // Count selectable items (videos or folders) to avoid DOM queries later
-                totalSelectableCount = data.entries.filter(e =>
-                    (!e.is_dir && e.video_info) || e.is_dir
-                ).length;
-                const header = document.getElementById('file-list-header');
-                const selectAllCheckbox = document.getElementById('select-all-checkbox');
-
-                if (totalSelectableCount > 0) {
-                    header.classList.remove('hidden');
-                } else {
-                    header.classList.add('hidden');
-                }
-                selectAllCheckbox.checked = false;
-                selectAllCheckbox.indeterminate = false;
-
-                list.innerHTML = data.entries.map(entry => {
-                    const isVideo = !entry.is_dir && entry.video_info;
-                    const isFolder = entry.is_dir;
-                    const isSelectable = isVideo || isFolder;
-                    const iconClass = entry.is_dir ? 'folder' : (isVideo ? 'video' : 'other');
-                    const icon = entry.is_dir
-                        ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M10 4H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2h-8l-2-2z"/></svg>`
-                        : isVideo
-                            ? `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>`
-                            : `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
-
-                    let metaHtml = '';
-                    // For folders, file_count is the number of videos inside; for videos it's 1
-                    const fileCount = entry.is_dir ? (entry.file_count || 0) : (isVideo ? 1 : 0);
-                    if (entry.is_dir) {
-                        const count = entry.file_count || 0;
-                        if (count > 0) {
-                            const size = formatBytes(entry.total_size || 0);
-                            metaHtml = `<span>${count} video${count !== 1 ? 's' : ''}</span><span>${size}</span>`;
-                        }
-                    } else if (isVideo) {
-                        const vi = entry.video_info;
-                        const codec = vi.video_codec?.toLowerCase() || '';
-                        let codecClass = 'h264';
-                        if (codec.includes('hevc') || codec.includes('h265')) {
-                            codecClass = 'hevc';
-                        } else if (codec.includes('av1')) {
-                            codecClass = 'av1';
-                        }
-                        const hdrBadge = vi.is_hdr ? '<span class="codec-badge hdr">HDR</span>' : '';
-                        metaHtml = `<span class="codec-badge ${codecClass}">${vi.video_codec}</span>${hdrBadge}<span>${vi.width}x${vi.height}</span>`;
-                    }
-
-                    return `<li class="file-item" data-path="${entry.path}" data-is-dir="${entry.is_dir}" onclick="handleFileClick(this, event)">
-                        ${isSelectable ? `<input type="checkbox" class="file-checkbox" onclick="handleCheckbox(this, event)" data-path="${entry.path}" data-file-count="${fileCount}">` : '<div style="width: 18px"></div>'}
-                        <div class="file-icon ${iconClass}">${icon}</div>
-                        <div class="file-info">
-                            <div class="file-name">${entry.name}</div>
-                            <div class="file-meta">${metaHtml}</div>
-                        </div>
-                        ${entry.is_dir ? '' : `<div class="file-size">${formatBytes(entry.size)}</div>`}
-                    </li>`;
-                }).join('');
+                lastBrowseEntries = data.entries || [];
+                renderBrowseEntries(sortBrowseEntries(lastBrowseEntries));
 
             } catch (err) {
                 console.error('Browse error:', err);
