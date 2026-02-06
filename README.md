@@ -66,7 +66,7 @@ services:
       - /path/to/fast/storage:/temp  # Optional: SSD for temp files
     environment:
       - PUID=1000
-      - PGID=1000
+      - PGID=1000  # For Intel/AMD GPU: set to group that owns /dev/dri/renderD128
     # GPU: uncomment the section for your hardware
     # --- Intel / AMD ---
     # devices:
