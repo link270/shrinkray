@@ -570,20 +570,16 @@
             user-select: none;
         }
 
-        .file-list-controls {
+        .browse-menu {
+            position: relative;
             margin-left: auto;
+        }
+
+        .browse-menu-trigger {
             display: flex;
             align-items: center;
-            gap: 8px;
-        }
-
-        .file-list-controls label {
-            font-size: 0.75rem;
-            color: var(--text-tertiary);
-        }
-
-        .file-sort-select {
-            padding: 6px 10px;
+            gap: 6px;
+            padding: 4px 10px;
             border: 1px solid var(--border);
             border-radius: var(--radius-sm);
             font-size: 0.75rem;
@@ -591,11 +587,83 @@
             background: var(--bg-secondary);
             color: var(--text-primary);
             cursor: pointer;
+            transition: border-color 0.15s ease;
         }
 
-        .file-sort-select:focus {
-            outline: none;
-            border-color: var(--accent);
+        .browse-menu-trigger:hover {
+            border-color: var(--border-hover);
+        }
+
+        .browse-menu-trigger svg {
+            width: 14px;
+            height: 14px;
+            opacity: 0.6;
+        }
+
+        .browse-menu-dropdown {
+            position: fixed;
+            min-width: 200px;
+            background: var(--bg-primary);
+            border: 1px solid var(--border);
+            border-radius: var(--radius-md);
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+            z-index: 1000;
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(-4px);
+            transition: opacity 0.15s ease, transform 0.15s ease, visibility 0.15s;
+        }
+
+        .browse-menu-dropdown.open {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+
+        .browse-menu-dropdown.open-upward {
+            transform: translateY(4px);
+        }
+
+        .browse-menu-dropdown.open.open-upward {
+            transform: translateY(0);
+        }
+
+        .browse-menu-section {
+            padding: 8px 0;
+        }
+
+        .browse-menu-section:not(:last-child) {
+            border-bottom: 1px solid var(--border);
+        }
+
+        .browse-menu-label {
+            padding: 4px 12px 6px;
+            font-size: 0.625rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: var(--text-tertiary);
+        }
+
+        .browse-menu-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 6px 12px;
+            font-size: 0.8125rem;
+            color: var(--text-secondary);
+            cursor: pointer;
+            transition: background 0.1s ease, color 0.1s ease;
+        }
+
+        .browse-menu-item:hover {
+            background: var(--bg-secondary);
+            color: var(--text-primary);
+        }
+
+        .browse-menu-item.active {
+            color: var(--accent);
+            font-weight: 500;
         }
 
         .file-item {
@@ -1980,12 +2048,21 @@
                             Select all
                         </label>
                         <span id="selection-count"></span>
-                        <div class="file-list-controls">
-                            <label for="browse-sort">Sort</label>
-                            <select class="file-sort-select" id="browse-sort" onchange="setBrowseSort(this.value)">
-                                <option value="name" selected>Alphabetical</option>
-                                <option value="size">Size (largest)</option>
-                            </select>
+                        <div class="browse-menu" id="browse-menu">
+                            <button class="browse-menu-trigger" onclick="toggleBrowseMenu(event)">
+                                <span id="browse-menu-label">Alphabetical</span>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="6 9 12 15 18 9"></polyline>
+                                </svg>
+                            </button>
+                            <div class="browse-menu-dropdown" id="browse-menu-dropdown">
+                                <div class="browse-menu-section">
+                                    <div class="browse-menu-label">Sort</div>
+                                    <div class="browse-menu-item active" data-sort="name" onclick="selectBrowseSort('name')">Alphabetical</div>
+                                    <div class="browse-menu-item" data-sort="size-largest" onclick="selectBrowseSort('size-largest')">Size (largest)</div>
+                                    <div class="browse-menu-item" data-sort="size-smallest" onclick="selectBrowseSort('size-smallest')">Size (smallest)</div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                     <ul class="file-list" id="file-list">
@@ -2410,11 +2487,12 @@
                     return a.is_dir ? -1 : 1;
                 }
 
-                if (browseSort === 'size') {
+                if (browseSort === 'size-largest' || browseSort === 'size-smallest') {
                     const aSize = getBrowseEntrySize(a);
                     const bSize = getBrowseEntrySize(b);
                     if (aSize !== bSize) {
-                        return bSize - aSize;
+                        const diff = bSize - aSize;
+                        return browseSort === 'size-smallest' ? -diff : diff;
                     }
                 }
 
@@ -2501,11 +2579,71 @@
             updateButtons();
         }
 
-        function setBrowseSort(value) {
-            browseSort = value;
+        function toggleBrowseMenu(event) {
+            event.stopPropagation();
+            const trigger = event.currentTarget;
+            const dropdown = document.getElementById('browse-menu-dropdown');
+            const isOpen = dropdown.classList.contains('open');
+
+            if (!isOpen) {
+                const rect = trigger.getBoundingClientRect();
+                const menuHeight = dropdown.scrollHeight || 200;
+                const spaceBelow = window.innerHeight - rect.bottom - 16;
+                const spaceAbove = rect.top - 16;
+                const openUpward = spaceBelow < menuHeight && spaceAbove > spaceBelow;
+
+                dropdown.classList.toggle('open-upward', openUpward);
+                dropdown.style.right = (window.innerWidth - rect.right) + 'px';
+
+                const availableSpace = openUpward ? spaceAbove : spaceBelow;
+                if (menuHeight > availableSpace) {
+                    dropdown.style.maxHeight = availableSpace + 'px';
+                    dropdown.style.overflowY = 'auto';
+                } else {
+                    dropdown.style.maxHeight = '';
+                    dropdown.style.overflowY = '';
+                }
+
+                if (openUpward) {
+                    dropdown.style.top = 'auto';
+                    dropdown.style.bottom = (window.innerHeight - rect.top + 6) + 'px';
+                } else {
+                    dropdown.style.top = (rect.bottom + 6) + 'px';
+                    dropdown.style.bottom = 'auto';
+                }
+            }
+
+            dropdown.classList.toggle('open');
+        }
+
+        function closeBrowseMenu() {
+            const dropdown = document.getElementById('browse-menu-dropdown');
+            dropdown.classList.remove('open');
+            dropdown.classList.remove('open-upward');
+        }
+
+        function selectBrowseSort(sortBy) {
+            browseSort = sortBy;
+            updateBrowseMenuDisplay();
             if (lastBrowseEntries && lastBrowseEntries.length > 0) {
                 renderBrowseEntries(sortBrowseEntries(lastBrowseEntries));
             }
+            closeBrowseMenu();
+        }
+
+        function updateBrowseMenuDisplay() {
+            const label = document.getElementById('browse-menu-label');
+            const sortLabels = {
+                'name': 'Alphabetical',
+                'size-largest': 'Size (largest)',
+                'size-smallest': 'Size (smallest)'
+            };
+            if (label) {
+                label.textContent = sortLabels[browseSort] || 'Alphabetical';
+            }
+            document.querySelectorAll('.browse-menu-item[data-sort]').forEach(item => {
+                item.classList.toggle('active', item.dataset.sort === browseSort);
+            });
         }
 
         function toggleJobDetails(jobId) {
@@ -2591,6 +2729,7 @@
                 // Update file list
                 lastBrowseEntries = data.entries || [];
                 renderBrowseEntries(sortBrowseEntries(lastBrowseEntries));
+                updateBrowseMenuDisplay();
 
             } catch (err) {
                 console.error('Browse error:', err);
@@ -3402,6 +3541,10 @@
             const menu = document.getElementById('queue-menu');
             if (menu && !menu.contains(event.target)) {
                 closeQueueMenu();
+            }
+            const browseMenu = document.getElementById('browse-menu');
+            if (browseMenu && !browseMenu.contains(event.target)) {
+                closeBrowseMenu();
             }
         });
 
