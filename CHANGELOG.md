@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-02-06
+
+### Added
+- **Runtime log level setting** (#92) — Change log verbosity (debug/info/warn/error) from the UI without restarting
+  - New dropdown in Advanced Settings
+  - `log_level` field on GET/PUT `/api/config` endpoints
+  - Uses `slog.LevelVar` for atomic, concurrent-safe level switching
+
+### Fixed
+- **API batch job ordering** (#86) — Jobs submitted via API now queue in the order paths are submitted, not alphabetically
+  - Replaced non-deterministic goroutine append + alphabetical sort with indexed pre-allocation
+  - Each concurrent probe writes to its original position, preserving submission order
+
 ## [2.0.8] - 2026-02-05
 
 ### Fixed
